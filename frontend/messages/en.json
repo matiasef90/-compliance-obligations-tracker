@@ -47,6 +47,12 @@
     "to": "To",
     "changedAt": "Date",
     "transition": "Change status",
+    "transitions": {
+      "pending": "Back to pending",
+      "in_progress": "Start",
+      "submitted": "Submit",
+      "done": "Mark as done"
+    },
     "errors": {
       "INVALID_TRANSITION": "Invalid transition.",
       "CONFLICT": "Obligation was modified by another session. Please reload.",

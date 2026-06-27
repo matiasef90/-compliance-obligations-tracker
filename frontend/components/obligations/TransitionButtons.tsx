@@ -12,15 +12,9 @@ interface TransitionButtonsProps {
   locale: string;
 }
 
-const STATUS_LABELS: Record<string, { es: string; en: string }> = {
-  pending:     { es: "Volver a pendiente", en: "Back to pending" },
-  in_progress: { es: "Iniciar", en: "Start" },
-  submitted:   { es: "Enviar", en: "Submit" },
-  done:        { es: "Completar", en: "Mark as done" },
-};
-
 export function TransitionButtons({ id, validTransitions, version, locale }: TransitionButtonsProps) {
   const t = useTranslations("detail.errors");
+  const tTransitions = useTranslations("detail.transitions");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -47,7 +41,7 @@ export function TransitionButtons({ id, validTransitions, version, locale }: Tra
             disabled={isPending}
             onClick={() => handleTransition(status)}
           >
-            {STATUS_LABELS[status]?.[locale as "es" | "en"] ?? status}
+            {tTransitions(status as Parameters<typeof tTransitions>[0])}
           </Button>
         ))}
       </div>

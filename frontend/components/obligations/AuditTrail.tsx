@@ -3,9 +3,10 @@ import type { AuditEntry } from "@/lib/types";
 
 interface AuditTrailProps {
   entries: AuditEntry[];
+  locale: string;
 }
 
-export function AuditTrail({ entries }: AuditTrailProps) {
+export function AuditTrail({ entries, locale }: AuditTrailProps) {
   const t = useTranslations("detail");
 
   if (entries.length === 0) {
@@ -28,7 +29,7 @@ export function AuditTrail({ entries }: AuditTrailProps) {
               <td className="px-4 py-2 text-gray-700">{entry.from_status}</td>
               <td className="px-4 py-2 text-gray-700">{entry.to_status}</td>
               <td className="px-4 py-2 text-gray-500">
-                {new Date(entry.changed_at).toLocaleString()}
+                {new Date(entry.changed_at).toLocaleString(locale)}
               </td>
             </tr>
           ))}

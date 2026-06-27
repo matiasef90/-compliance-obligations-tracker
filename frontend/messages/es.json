@@ -47,6 +47,12 @@
     "to": "Hacia",
     "changedAt": "Fecha",
     "transition": "Cambiar estado",
+    "transitions": {
+      "pending": "Volver a pendiente",
+      "in_progress": "Iniciar",
+      "submitted": "Enviar",
+      "done": "Completar"
+    },
     "errors": {
       "INVALID_TRANSITION": "Transición inválida.",
       "CONFLICT": "La obligación fue modificada por otra sesión. Recargá la página.",

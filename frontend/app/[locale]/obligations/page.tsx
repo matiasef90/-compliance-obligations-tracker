@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { getTranslations } from "next-intl/server";
 import { fetchObligations } from "@/lib/api";
 import { ObligationCard } from "@/components/obligations/ObligationCard";
@@ -19,7 +20,9 @@ export default async function ObligationsPage({ params, searchParams }: PageProp
       <Topbar title={t("title")} locale={locale} showNewButton />
       <div className="p-6">
         <div className="mb-5">
-          <StatusFilter />
+          <Suspense>
+            <StatusFilter />
+          </Suspense>
         </div>
         {obligations.length === 0 ? (
           <p className="text-sm text-gray-500 text-center py-12">{t("empty")}</p>
