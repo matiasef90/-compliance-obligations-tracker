@@ -63,13 +63,11 @@ class ObligationService:
     async def create_obligation(self, data: dict) -> ObligationDTO:
         obligation = await self._repo.create(data)
         await self._session.commit()
-        await self._session.refresh(obligation)
         return self._to_dto(obligation)
 
     async def update_obligation(self, id: str, data: dict, version: int) -> ObligationDTO:
         obligation = await self._repo.update(id, data, version)
         await self._session.commit()
-        await self._session.refresh(obligation)
         return self._to_dto(obligation)
 
     async def delete_obligation(self, id: str) -> None:
@@ -93,8 +91,8 @@ class ObligationService:
         )
         await self._audit_repo.log(id, from_status, to_status.value)
         await self._session.commit()
-        await self._session.refresh(obligation)
-        return self._to_dto(obligation)
+        obligation = await self._repo.get_by_id(id)
+        return self._to_dto(obligation)  # type: ignore[arg-type]
 
     def _to_dto(self, obligation: Obligation) -> ObligationDTO:
         status = ObligationStatus(obligation.status)

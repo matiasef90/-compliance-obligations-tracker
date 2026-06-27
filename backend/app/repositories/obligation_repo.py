@@ -1,5 +1,6 @@
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.db.models import Obligation
 
@@ -17,12 +18,16 @@ class ObligationRepo:
         self._session = session
 
     async def get_all(self) -> list[Obligation]:
-        result = await self._session.execute(select(Obligation))
+        result = await self._session.execute(
+            select(Obligation).options(selectinload(Obligation.audit_logs))
+        )
         return list(result.scalars().all())
 
     async def get_by_id(self, id: str) -> Obligation | None:
         result = await self._session.execute(
-            select(Obligation).where(Obligation.id == id)
+            select(Obligation)
+            .where(Obligation.id == id)
+            .options(selectinload(Obligation.audit_logs))
         )
         return result.scalar_one_or_none()
 
@@ -30,8 +35,7 @@ class ObligationRepo:
         obligation = Obligation(**data)
         self._session.add(obligation)
         await self._session.flush()
-        await self._session.refresh(obligation)
-        return obligation
+        return await self.get_by_id(obligation.id)  # type: ignore[return-value]
 
     async def update(self, id: str, data: dict, expected_version: int) -> Obligation:
         obligation = await self.get_by_id(id)
@@ -46,8 +50,7 @@ class ObligationRepo:
         obligation.version = expected_version + 1
 
         await self._session.flush()
-        await self._session.refresh(obligation)
-        return obligation
+        return await self.get_by_id(id)  # type: ignore[return-value]
 
     async def delete(self, id: str) -> None:
         result = await self._session.execute(
