@@ -26,6 +26,13 @@
       "regulatory_disclosure": "Divulgación regulatoria",
       "other": "Otro"
     },
+    "columns": {
+      "title": "Título",
+      "type": "Tipo",
+      "owner": "Responsable",
+      "dueDate": "Vencimiento",
+      "status": "Estado"
+    },
     "filter": {
       "all": "Todas",
       "pending": "Pendientes",

@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { ObligationCard } from "./ObligationCard";
+import { Badge } from "@/components/ui/Badge";
 import type { Obligation, ObligationStatus } from "@/lib/types";
 
 const STATUSES = ["all", "pending", "in_progress", "submitted", "done"] as const;
@@ -29,7 +30,8 @@ export function ObligationsList({ obligations, locale }: ObligationsListProps) {
   });
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
+      {/* Toolbar */}
       <div className="flex flex-col sm:flex-row gap-3">
         <input
           type="text"
@@ -55,13 +57,48 @@ export function ObligationsList({ obligations, locale }: ObligationsListProps) {
         </div>
       </div>
 
+      {/* Table */}
       {filtered.length === 0 ? (
         <p className="text-sm text-gray-500 text-center py-12">{t("empty")}</p>
       ) : (
-        <div className="grid gap-3">
-          {filtered.map((o) => (
-            <ObligationCard key={o.id} obligation={o} locale={locale} />
-          ))}
+        <div className="rounded-xl border border-gray-100 overflow-hidden bg-white">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-100">
+                <th className="text-left px-4 py-3 font-medium text-gray-500 w-[35%]">{t("columns.title")}</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-500">{t("columns.type")}</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-500">{t("columns.owner")}</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-500">{t("columns.dueDate")}</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-500">{t("columns.status")}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {filtered.map((o) => (
+                <Link key={o.id} href={`/${locale}/obligations/${o.id}`} legacyBehavior={false}>
+                  <tr className="hover:bg-gray-50 transition-colors cursor-pointer">
+                    <td className="px-4 py-3">
+                      <span className="font-medium text-gray-900 truncate block max-w-xs">{o.title}</span>
+                    </td>
+                    <td className="px-4 py-3 text-gray-500">
+                      {t(`type_labels.${o.type}`)}
+                    </td>
+                    <td className="px-4 py-3 text-gray-500">{o.owner}</td>
+                    <td className="px-4 py-3 text-gray-500">{o.due_date}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <Badge status={o.status} label={t(`status.${o.status}`)} />
+                        {o.overdue && (
+                          <span className="text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
+                            {t("overdue")}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                </Link>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

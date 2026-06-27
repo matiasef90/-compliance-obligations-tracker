@@ -26,6 +26,13 @@
       "regulatory_disclosure": "Regulatory disclosure",
       "other": "Other"
     },
+    "columns": {
+      "title": "Title",
+      "type": "Type",
+      "owner": "Owner",
+      "dueDate": "Due date",
+      "status": "Status"
+    },
     "filter": {
       "all": "All",
       "pending": "Pending",
