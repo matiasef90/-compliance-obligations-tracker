@@ -3,11 +3,11 @@ import { ObligationForm } from "@/components/obligations/ObligationForm";
 import { Topbar } from "@/components/layout/Topbar";
 
 interface PageProps {
-  params: { locale: string };
+  params: Promise<{ locale: string }>;
 }
 
 export default async function NewObligationPage({ params }: PageProps) {
-  const { locale } = params;
+  const { locale } = await params;
   const t = await getTranslations({ locale, namespace: "form" });
 
   return (

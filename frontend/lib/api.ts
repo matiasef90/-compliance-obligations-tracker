@@ -6,11 +6,8 @@ if (!API_URL) {
   throw new Error("API_URL environment variable is not set");
 }
 
-export async function fetchObligations(status?: string): Promise<Obligation[]> {
-  const url = status
-    ? `${API_URL}/obligations?status=${status}`
-    : `${API_URL}/obligations`;
-  const res = await fetch(url, { cache: "no-store" });
+export async function fetchObligations(): Promise<Obligation[]> {
+  const res = await fetch(`${API_URL}/obligations`, { cache: "no-store" });
   if (!res.ok) throw new Error(`Failed to fetch obligations: ${res.status}`);
   const data = await res.json();
   return data.items as Obligation[];

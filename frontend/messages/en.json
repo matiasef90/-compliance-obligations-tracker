@@ -8,6 +8,7 @@
   "obligations": {
     "title": "Obligations",
     "empty": "No obligations yet. Create one.",
+    "searchPlaceholder": "Search by title, owner or type...",
     "overdue": "Overdue",
     "dueDate": "Due",
     "owner": "Owner",

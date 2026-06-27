@@ -8,6 +8,7 @@
   "obligations": {
     "title": "Obligaciones",
     "empty": "No hay obligaciones. Creá una nueva.",
+    "searchPlaceholder": "Buscar por título, responsable o tipo...",
     "overdue": "Vencida",
     "dueDate": "Vence",
     "owner": "Responsable",

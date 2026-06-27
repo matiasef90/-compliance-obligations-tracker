@@ -7,11 +7,11 @@ import { TransitionButtons } from "@/components/obligations/TransitionButtons";
 import { Topbar } from "@/components/layout/Topbar";
 
 interface PageProps {
-  params: { locale: string; id: string };
+  params: Promise<{ locale: string; id: string }>;
 }
 
 export default async function ObligationDetailPage({ params }: PageProps) {
-  const { locale, id } = params;
+  const { locale, id } = await params;
 
   let obligation;
   try {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { createObligation } from "@/actions/createObligation";
 import { Button } from "@/components/ui/Button";
@@ -17,13 +17,13 @@ interface ObligationFormProps {
   locale: string;
 }
 
-const initialState = { error: undefined };
+const initialState: { error?: string } = {};
 
 export function ObligationForm({ locale }: ObligationFormProps) {
   const t = useTranslations("form");
   const tTypes = useTranslations("obligations.type_labels");
 
-  const boundAction = createObligation.bind(null, locale);
+  const boundAction = useMemo(() => createObligation.bind(null, locale), [locale]);
   const [state, formAction, isPending] = useActionState(boundAction, initialState);
 
   return (
