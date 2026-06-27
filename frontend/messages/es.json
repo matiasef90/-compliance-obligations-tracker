@@ -1,0 +1,77 @@
+{
+  "nav": {
+    "obligations": "Obligaciones"
+  },
+  "topbar": {
+    "newObligation": "Nueva obligación"
+  },
+  "obligations": {
+    "title": "Obligaciones",
+    "empty": "No hay obligaciones. Creá una nueva.",
+    "overdue": "Vencida",
+    "dueDate": "Vence",
+    "owner": "Responsable",
+    "type": "Tipo",
+    "status": {
+      "pending": "Pendiente",
+      "in_progress": "En progreso",
+      "submitted": "Enviada",
+      "done": "Completada"
+    },
+    "type_labels": {
+      "annual_report": "Informe anual",
+      "tax_filing": "Declaración impositiva",
+      "audit": "Auditoría",
+      "regulatory_disclosure": "Divulgación regulatoria",
+      "other": "Otro"
+    },
+    "filter": {
+      "all": "Todas",
+      "pending": "Pendientes",
+      "in_progress": "En progreso",
+      "submitted": "Enviadas",
+      "done": "Completadas"
+    }
+  },
+  "detail": {
+    "title": "Detalle de obligación",
+    "description": "Descripción",
+    "taxId": "CUIT / Tax ID",
+    "requiresDocument": "Requiere documento",
+    "documentUrl": "URL del documento",
+    "yes": "Sí",
+    "no": "No",
+    "none": "—",
+    "auditTrail": "Historial de cambios",
+    "from": "Desde",
+    "to": "Hacia",
+    "changedAt": "Fecha",
+    "transition": "Cambiar estado",
+    "errors": {
+      "INVALID_TRANSITION": "Transición inválida.",
+      "CONFLICT": "La obligación fue modificada por otra sesión. Recargá la página.",
+      "DOCUMENT_REQUIRED": "Se requiere un documento antes de enviar."
+    }
+  },
+  "form": {
+    "title": "Nueva obligación",
+    "titleField": "Título",
+    "typeField": "Tipo",
+    "descriptionField": "Descripción",
+    "dueDateField": "Fecha de vencimiento",
+    "ownerField": "Responsable",
+    "requiresDocumentField": "Requiere documento",
+    "documentUrlField": "URL del documento",
+    "taxIdField": "CUIT / Tax ID",
+    "submit": "Crear obligación",
+    "cancel": "Cancelar",
+    "errors": {
+      "required": "Este campo es obligatorio.",
+      "generic": "Ocurrió un error. Intentá de nuevo."
+    }
+  },
+  "locale": {
+    "es": "Español",
+    "en": "English"
+  }
+}

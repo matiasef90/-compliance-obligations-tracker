@@ -1,0 +1,77 @@
+{
+  "nav": {
+    "obligations": "Obligations"
+  },
+  "topbar": {
+    "newObligation": "New obligation"
+  },
+  "obligations": {
+    "title": "Obligations",
+    "empty": "No obligations yet. Create one.",
+    "overdue": "Overdue",
+    "dueDate": "Due",
+    "owner": "Owner",
+    "type": "Type",
+    "status": {
+      "pending": "Pending",
+      "in_progress": "In progress",
+      "submitted": "Submitted",
+      "done": "Done"
+    },
+    "type_labels": {
+      "annual_report": "Annual report",
+      "tax_filing": "Tax filing",
+      "audit": "Audit",
+      "regulatory_disclosure": "Regulatory disclosure",
+      "other": "Other"
+    },
+    "filter": {
+      "all": "All",
+      "pending": "Pending",
+      "in_progress": "In progress",
+      "submitted": "Submitted",
+      "done": "Done"
+    }
+  },
+  "detail": {
+    "title": "Obligation detail",
+    "description": "Description",
+    "taxId": "Tax ID",
+    "requiresDocument": "Requires document",
+    "documentUrl": "Document URL",
+    "yes": "Yes",
+    "no": "No",
+    "none": "—",
+    "auditTrail": "Change history",
+    "from": "From",
+    "to": "To",
+    "changedAt": "Date",
+    "transition": "Change status",
+    "errors": {
+      "INVALID_TRANSITION": "Invalid transition.",
+      "CONFLICT": "Obligation was modified by another session. Please reload.",
+      "DOCUMENT_REQUIRED": "A document is required before submitting."
+    }
+  },
+  "form": {
+    "title": "New obligation",
+    "titleField": "Title",
+    "typeField": "Type",
+    "descriptionField": "Description",
+    "dueDateField": "Due date",
+    "ownerField": "Owner",
+    "requiresDocumentField": "Requires document",
+    "documentUrlField": "Document URL",
+    "taxIdField": "Tax ID",
+    "submit": "Create obligation",
+    "cancel": "Cancel",
+    "errors": {
+      "required": "This field is required.",
+      "generic": "An error occurred. Please try again."
+    }
+  },
+  "locale": {
+    "es": "Español",
+    "en": "English"
+  }
+}
