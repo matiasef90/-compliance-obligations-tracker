@@ -16,12 +16,16 @@ export default async function ObligationDetailPage({ params }: PageProps) {
   let obligation;
   try {
     obligation = await fetchObligation(id);
-  } catch {
-    notFound();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "";
+    if (msg.includes("404")) notFound();
+    throw err;
   }
 
-  const t = await getTranslations("detail");
-  const tObl = await getTranslations("obligations");
+  const [t, tObl] = await Promise.all([
+    getTranslations({ locale, namespace: "detail" }),
+    getTranslations({ locale, namespace: "obligations" }),
+  ]);
 
   return (
     <div>

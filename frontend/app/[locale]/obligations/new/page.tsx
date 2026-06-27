@@ -1,4 +1,4 @@
-import { useTranslations } from "next-intl";
+import { getTranslations } from "next-intl/server";
 import { ObligationForm } from "@/components/obligations/ObligationForm";
 import { Topbar } from "@/components/layout/Topbar";
 
@@ -6,9 +6,9 @@ interface PageProps {
   params: { locale: string };
 }
 
-export default function NewObligationPage({ params }: PageProps) {
+export default async function NewObligationPage({ params }: PageProps) {
   const { locale } = params;
-  const t = useTranslations("form");
+  const t = await getTranslations({ locale, namespace: "form" });
 
   return (
     <div>

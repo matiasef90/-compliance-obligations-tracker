@@ -56,7 +56,8 @@
     "errors": {
       "INVALID_TRANSITION": "Transición inválida.",
       "CONFLICT": "La obligación fue modificada por otra sesión. Recargá la página.",
-      "DOCUMENT_REQUIRED": "Se requiere un documento antes de enviar."
+      "DOCUMENT_REQUIRED": "Se requiere un documento antes de enviar.",
+      "GENERIC": "Ocurrió un error inesperado. Intentá de nuevo."
     }
   },
   "form": {

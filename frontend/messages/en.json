@@ -56,7 +56,8 @@
     "errors": {
       "INVALID_TRANSITION": "Invalid transition.",
       "CONFLICT": "Obligation was modified by another session. Please reload.",
-      "DOCUMENT_REQUIRED": "A document is required before submitting."
+      "DOCUMENT_REQUIRED": "A document is required before submitting.",
+      "GENERIC": "An unexpected error occurred. Please try again."
     }
   },
   "form": {

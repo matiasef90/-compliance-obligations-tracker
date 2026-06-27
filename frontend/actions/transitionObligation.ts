@@ -18,9 +18,10 @@ export async function transitionObligation(
 
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    return { error: data.error ?? "ERROR" };
+    return { error: data.error ?? "GENERIC" };
   }
 
   revalidatePath(`/${locale}/obligations/${id}`);
+  revalidatePath(`/${locale}/obligations`);
   return {};
 }

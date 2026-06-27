@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { transitionObligation } from "@/actions/transitionObligation";
 import { Button } from "@/components/ui/Button";
@@ -17,6 +18,7 @@ export function TransitionButtons({ id, validTransitions, version, locale }: Tra
   const tTransitions = useTranslations("detail.transitions");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const router = useRouter();
 
   function handleTransition(toStatus: string) {
     setError(null);
@@ -25,6 +27,8 @@ export function TransitionButtons({ id, validTransitions, version, locale }: Tra
       if (result.error) {
         const msg = t(result.error as Parameters<typeof t>[0]) ?? result.error;
         setError(msg);
+      } else {
+        router.refresh();
       }
     });
   }

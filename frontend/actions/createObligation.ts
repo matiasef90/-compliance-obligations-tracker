@@ -29,7 +29,7 @@ export async function createObligation(
 
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    return { error: data.detail ?? "Error al crear la obligación." };
+    return { error: data.error ?? data.detail ?? "Error al crear la obligación." };
   }
 
   const created = await res.json();
