@@ -39,6 +39,15 @@
       "in_progress": "In progress",
       "submitted": "Submitted",
       "done": "Done"
+    },
+    "kpi": {
+      "total": "Total",
+      "overdue": "Overdue",
+      "upcoming": "Due soon",
+      "pending": "Pending",
+      "in_progress": "In progress",
+      "submitted": "Submitted",
+      "done": "Done"
     }
   },
   "detail": {

@@ -32,16 +32,18 @@ export function ObligationsList({ obligations, locale }: ObligationsListProps) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const filtered = obligations.filter((o) => {
-    const matchesStatus = status === "all" || o.status === status;
-    const q = search.toLowerCase();
-    const matchesSearch =
-      q === "" ||
-      o.title.toLowerCase().includes(q) ||
-      o.owner.toLowerCase().includes(q) ||
-      o.type.toLowerCase().includes(q);
-    return matchesStatus && matchesSearch;
-  });
+  const filtered = obligations
+    .filter((o) => {
+      const matchesStatus = status === "all" || o.status === status;
+      const q = search.toLowerCase();
+      const matchesSearch =
+        q === "" ||
+        o.title.toLowerCase().includes(q) ||
+        o.owner.toLowerCase().includes(q) ||
+        o.type.toLowerCase().includes(q);
+      return matchesStatus && matchesSearch;
+    })
+    .sort((a, b) => a.due_date.localeCompare(b.due_date));
 
   return (
     <div className="space-y-4">
@@ -120,12 +122,14 @@ export function ObligationsList({ obligations, locale }: ObligationsListProps) {
                 <tr
                   key={o.id}
                   onClick={() => router.push(`/${locale}/obligations/${o.id}`)}
-                  className="hover:bg-gray-50 transition-colors cursor-pointer"
+                  className={`transition-colors cursor-pointer ${o.overdue ? "bg-red-50 hover:bg-red-100" : "hover:bg-gray-50"}`}
                 >
-                  <td className="px-4 py-3 font-medium text-gray-900">{o.title}</td>
-                  <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{t(`type_labels.${o.type}`)}</td>
-                  <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{o.owner}</td>
-                  <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{o.due_date}</td>
+                  <td className={`px-4 py-3 font-medium ${o.overdue ? "text-red-900" : "text-gray-900"}`}>{o.title}</td>
+                  <td className={`px-4 py-3 whitespace-nowrap ${o.overdue ? "text-red-700" : "text-gray-500"}`}>{t(`type_labels.${o.type}`)}</td>
+                  <td className={`px-4 py-3 whitespace-nowrap ${o.overdue ? "text-red-700" : "text-gray-500"}`}>{o.owner}</td>
+                  <td className={`px-4 py-3 whitespace-nowrap font-medium ${o.overdue ? "text-red-700" : "text-gray-500"}`}>
+                    {new Date(`${o.due_date}T00:00:00`).toLocaleDateString(locale)}
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <Badge status={o.status} label={t(`status.${o.status}`)} />

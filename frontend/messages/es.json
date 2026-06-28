@@ -39,6 +39,15 @@
       "in_progress": "En progreso",
       "submitted": "Enviadas",
       "done": "Completadas"
+    },
+    "kpi": {
+      "total": "Total",
+      "overdue": "Vencidas",
+      "upcoming": "Próximas a vencer",
+      "pending": "Pendientes",
+      "in_progress": "En progreso",
+      "submitted": "Enviadas",
+      "done": "Completadas"
     }
   },
   "detail": {
