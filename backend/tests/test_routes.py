@@ -1,5 +1,6 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -17,6 +18,13 @@ OBLIGATION_PAYLOAD = {
     "owner": "tester",
     "company_tax_id": "30-99999999-9",
 }
+
+
+@pytest.fixture(autouse=True)
+async def clean_db():
+    async with TestSessionLocal() as session:
+        await session.execute(text("TRUNCATE TABLE obligation_audit_log, obligations RESTART IDENTITY CASCADE"))
+        await session.commit()
 
 
 @pytest.fixture

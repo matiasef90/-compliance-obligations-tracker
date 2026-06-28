@@ -97,7 +97,7 @@ async def update_obligation(
     id: str, body: ObligationUpdate, session: AsyncSession = Depends(get_session)
 ) -> ObligationResponse:
     service = ObligationService(session)
-    data = {k: v for k, v in body.model_dump().items() if v is not None and k != "version"}
+    data = {k: v for k, v in body.model_dump().items() if k in body.model_fields_set and k != "version"}
     dto = await service.update_obligation(id, data, body.version)
     return _dto_to_response(dto)
 
