@@ -315,8 +315,173 @@ Tabla separada `obligation_audit_log (id, obligation_id, from_status, to_status,
 
 ## 11. Uso de IA
 
-*Esta sección se completa durante la implementación.*
+La IA (Claude Sonnet) se usó para generar la estructura inicial de todos los módulos — backend y frontend — y para iterar sobre el código en sesiones de code review. A continuación se detallan los casos donde el código generado fue aceptado sin cambios, y los casos donde fue rechazado o corregido, con la razón concreta.
 
-**Formato esperado:**
-- Dónde ayudó sin corrección necesaria
-- Dónde generó código que fue rechazado o corregido, con el ejemplo concreto y la razón
+---
+
+### Lo que funcionó sin corrección
+
+- Estructura de capas del backend (routes / services / repositories / domain) y separación de responsabilidades entre ellas.
+- Implementación de la máquina de estados como tabla de transiciones + función pura `validate_transition`.
+- Función `mask_tax_id` y su ubicación en el dominio.
+- Cálculo de `overdue` como campo derivado en el servicio, sin persistirlo.
+- Optimistic locking con campo `version` y respuesta 409 al detectar conflicto.
+- Audit trail en la misma transacción que el UPDATE de estado.
+- Server Actions para mutaciones (`createObligation`, `transitionObligation`) y revalidación automática de caché con `revalidatePath`.
+- Separación de Client Components al mínimo necesario (`ObligationForm`, `TransitionButtons`, `StatusFilter`).
+
+---
+
+### Correcciones aplicadas
+
+#### 1. Navegación por fila de tabla: `<Link>` sobre `<tr>` es HTML inválido
+
+**Código generado:** `<Link>` de Next.js envolviendo un `<tr>` para hacer clickeable cada fila.
+
+**Problema:** `<a>` como hijo de `<tr>` es HTML inválido. React lo detecta y lanza errores de hidratación en consola; algunos browsers lo corrigen silenciosamente, otros rompen el layout.
+
+**Corrección:** se reemplazó por `onClick` + `router.push()` directamente sobre el `<tr>`, con cursor pointer vía Tailwind.
+
+```tsx
+// Antes (inválido)
+<Link href={`/${locale}/obligations/${o.id}`}>
+  <tr>...</tr>
+</Link>
+
+// Después (correcto)
+<tr
+  className="cursor-pointer hover:bg-gray-50"
+  onClick={() => router.push(`/${locale}/obligations/${o.id}`)}
+>
+```
+
+---
+
+#### 2. Filtro de estado: pills de botón reemplazadas por `<select>`
+
+**Código generado:** fila de botones tipo "pill" para filtrar por estado, con lógica de estado activo via className condicional.
+
+**Decisión de diseño:** se reemplazó por un `<select>` nativo. Razones: ocupa menos espacio horizontal en mobile, es accesible por teclado sin CSS adicional, y evita la proliferación de botones cuando los estados crecen.
+
+---
+
+#### 3. Manejo de errores en `createObligation`: `data.detail` antes que `data.error`
+
+**Código generado:** al leer el error del backend, se usaba `data.detail` directamente.
+
+**Problema:** el contrato de la API define `{ error: "...", detail: "..." }`. Para errores de validación de FastAPI, `detail` es un array de objetos, lo que produce `[object Object]` en pantalla. El campo semántico correcto es `data.error`.
+
+**Corrección:**
+
+```ts
+// Antes
+return { error: data.detail ?? "Error al crear la obligación." };
+
+// Después
+return { error: data.error ?? data.detail ?? "Error al crear la obligación." };
+```
+
+Se lee `data.error` primero (convención de la API), `data.detail` como fallback para errores de validación de FastAPI, y finalmente un string literal.
+
+---
+
+#### 4. `TransitionButtons`: race condition en la versión tras transición exitosa
+
+**Código generado:** al hacer una transición exitosa, el componente no llamaba `router.refresh()`. El Server Component padre se re-renderizaba eventualmente, pero mientras tanto `isPending` volvía a `false` con la versión vieja, lo que permitía disparar una segunda transición con el `version` obsoleto (causando un 409 innecesario).
+
+**Corrección:** se añadió `router.refresh()` dentro del `startTransition` en el branch de éxito, para que `isPending` permanezca `true` hasta que el RSC termine de re-renderizar y entregue la nueva prop `version`.
+
+```tsx
+startTransition(async () => {
+  const result = await transitionObligation(id, toStatus, version, locale);
+  if (result.error) {
+    setError(...);
+  } else {
+    router.refresh(); // ← mantiene isPending=true hasta que RSC re-renderiza
+  }
+});
+```
+
+---
+
+#### 5. `StatusFilter` sin `Suspense` en la página de lista
+
+**Código generado:** `StatusFilter` (que usa `useSearchParams`) se montaba directamente en el Server Component de la página.
+
+**Problema:** Next.js App Router requiere que todo componente que llame a `useSearchParams` esté envuelto en `<Suspense>`, o el build falla con un error de SSR.
+
+**Corrección:** se envolvió `<StatusFilter>` en `<Suspense fallback={null}>` en `obligations/page.tsx`.
+
+---
+
+#### 6. Labels de `TransitionButtons` hardcodeados en inglés
+
+**Código generado:** los labels de los botones de transición (`"Mark as In Progress"`, `"Submit"`, etc.) estaban hardcodeados en inglés en el componente.
+
+**Corrección:** se movieron al sistema de i18n (`messages/en.json` y `messages/es.json` bajo la clave `detail.transitions`), y el componente los lee con `useTranslations("detail.transitions")`.
+
+---
+
+#### 7. `useTranslations` (hook cliente) en un Server Component
+
+**Código generado:** `new/page.tsx` usaba el hook `useTranslations` de next-intl, que es exclusivo de Client Components.
+
+**Corrección:** se reemplazó por `await getTranslations({ locale })`, que es la API correcta para Server Components y consistente con el resto de las páginas.
+
+---
+
+#### 8. Discriminación 404 vs 5xx en la página de detalle
+
+**Código generado:** cualquier excepción al cargar una obligación resultaba en renderizar el componente `NotFound`.
+
+**Problema:** un error 500 del servidor no es un "not found" — debe propagarse al error boundary para que el usuario vea un mensaje apropiado, no una pantalla de "obligación no encontrada".
+
+**Corrección:** se discrimina el status HTTP: solo `404` redirige a `notFound()`, cualquier otro error se re-lanza para que lo capture el error boundary.
+
+---
+
+#### 9. `getTranslations` secuencial en lugar de paralelo
+
+**Código generado:** en `[id]/page.tsx`, las dos llamadas a `getTranslations` se ejecutaban de forma secuencial (una `await` tras otra).
+
+**Corrección:** se ejecutan en paralelo con `Promise.all`, reduciendo la latencia de renderizado del Server Component.
+
+```ts
+// Antes
+const t = await getTranslations({ locale, namespace: "detail" });
+const tStatus = await getTranslations({ locale, namespace: "obligations" });
+
+// Después
+const [t, tStatus] = await Promise.all([
+  getTranslations({ locale, namespace: "detail" }),
+  getTranslations({ locale, namespace: "obligations" }),
+]);
+```
+
+---
+
+#### 10. Ícono de búsqueda: brújula reemplazada por lupa
+
+**Código generado:** ícono SVG de brújula (compass) en el campo de búsqueda.
+
+**Decisión de diseño:** se reemplazó por una lupa (`circle + line` diagonal), que es el ícono universalmente asociado a la acción de buscar. Una brújula no comunica búsqueda.
+
+---
+
+#### 11. Color del ícono de búsqueda sincronizado con el borde al hacer focus
+
+**Código generado:** el ícono de búsqueda mantenía `text-gray-400` siempre, sin reaccionar al estado del input.
+
+**Decisión de diseño:** al hacer focus el input muestra un ring violeta (`focus:ring-accent`). El ícono debe acompañar visualmente ese cambio. Se agregó estado `searchFocused` controlado por `onFocus`/`onBlur` del input, y se aplica `text-accent` al SVG cuando está activo.
+
+```tsx
+<svg className={`... transition-colors ${searchFocused ? "text-accent" : "text-gray-400"}`}>
+```
+
+---
+
+#### 12. Filtro de estado: `<select>` nativo reemplazado por dropdown personalizado
+
+**Código generado (iteración previa):** `<select>` nativo. Visualmente inconsistente con el resto de la UI porque el panel desplegable lo renderiza el sistema operativo con su propio estilo, ignorando cualquier CSS de Tailwind sobre los `<option>`.
+
+**Decisión de diseño:** se reemplazó por un dropdown completamente custom: botón trigger con el mismo estilo de los inputs (`rounded-lg border border-gray-200 bg-white`), panel con `rounded-xl border border-gray-100 bg-white shadow-sm`, items con `hover:bg-gray-50`, y el ítem seleccionado con `bg-violet-50 text-accent`. La flecha del trigger rota 180° al abrirse. El cierre al hacer click fuera se maneja con `useEffect` + `mousedown` sobre `document`.
