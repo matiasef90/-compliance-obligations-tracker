@@ -550,3 +550,37 @@ useEffect(() => {
 ```
 
 `pinnedRef.current` se actualiza sincrónicamente en cada render, evitando que el callback del intervalo lea un valor stale de `pinned`.
+
+---
+
+#### 16. Lista de obligaciones ordenada por vencimiento ascendente
+
+**Código generado:** la lista mostraba las obligaciones en el orden devuelto por el backend (orden de inserción).
+
+**Decisión de diseño:** el caso de uso principal es detectar qué vence primero. Se ordenó ascendentemente por `due_date` en el cliente, después de aplicar los filtros de búsqueda y estado. La comparación usa `localeCompare` sobre el string ISO (`YYYY-MM-DD`), que es lexicográficamente correcto sin necesidad de parsear fechas.
+
+```ts
+.sort((a, b) => a.due_date.localeCompare(b.due_date))
+```
+
+---
+
+#### 17. Filas vencidas resaltadas en rojo en la lista
+
+**Código generado:** todas las filas tenían el mismo estilo neutro (`hover:bg-gray-50`, texto `text-gray-900`/`text-gray-500`).
+
+**Decisión de diseño:** una obligación vencida requiere atención inmediata. Se resalta la fila completa con `bg-red-50 hover:bg-red-100` y el texto cambia a tonos rojos (`text-red-900`, `text-red-700`), incluyendo la fecha de vencimiento en `font-medium` para reforzar la urgencia. El campo `overdue` ya viene calculado por el backend, no se reimplementa la lógica en el frontend.
+
+---
+
+#### 18. Formato de fecha adaptado al locale en la lista
+
+**Código generado:** la fecha de vencimiento se mostraba como el string ISO crudo devuelto por el backend (`2026-12-31`), sin adaptación al locale activo.
+
+**Decisión de diseño:** el formato ISO es poco legible para el usuario final y no respeta la convención regional (día/mes en español, mes/día en inglés). Se reemplazó por `toLocaleDateString(locale)`:
+
+```ts
+new Date(`${o.due_date}T00:00:00`).toLocaleDateString(locale)
+```
+
+El sufijo `T00:00:00` (sin zona horaria) es intencional: `new Date("2026-12-31")` se parsea como UTC midnight, lo que en zonas horarias con offset negativo mostraría el día anterior. Con `T00:00:00` se parsea en hora local, evitando el off-by-one. El mismo patrón se usa en `AuditTrail` con `toLocaleString(locale)` para fechas con hora.
