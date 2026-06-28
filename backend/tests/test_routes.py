@@ -73,3 +73,57 @@ async def test_transition_stale_version_returns_409(client):
 
     assert response.status_code == 409
     assert response.json()["error"] == "CONFLICT"
+
+
+async def test_list_obligations_returns_paginated_response(client):
+    # Crear 3 obligaciones para tener datos
+    for i in range(3):
+        await client.post("/obligations", json={**OBLIGATION_PAYLOAD, "title": f"Oblig {i}", "due_date": f"2027-0{i+1}-01"})
+
+    response = await client.get("/obligations?page=1&limit=2")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "items" in data
+    assert "total" in data
+    assert "page" in data
+    assert "limit" in data
+    assert "pages" in data
+    assert data["page"] == 1
+    assert data["limit"] == 2
+    assert len(data["items"]) <= 2
+
+
+async def test_list_obligations_filter_by_status(client):
+    await client.post("/obligations", json=OBLIGATION_PAYLOAD)
+
+    response = await client.get("/obligations?status=pending")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert all(item["status"] == "pending" for item in data["items"])
+
+
+async def test_list_obligations_filter_by_search(client):
+    await client.post("/obligations", json={**OBLIGATION_PAYLOAD, "title": "Informe fiscal único"})
+
+    response = await client.get("/obligations?search=fiscal")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert any("fiscal" in item["title"].lower() for item in data["items"])
+
+
+async def test_get_stats_returns_counts(client):
+    await client.post("/obligations", json=OBLIGATION_PAYLOAD)
+
+    response = await client.get("/obligations/stats")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "total" in data
+    assert "overdue" in data
+    assert "upcoming_7_days" in data
+    assert "by_status" in data
+    assert data["total"] >= 1
+    assert data["by_status"]["pending"] >= 1

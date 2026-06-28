@@ -33,6 +33,16 @@ class ObligationResponse(BaseModel):
 class ObligationListResponse(BaseModel):
     items: list[ObligationResponse]
     total: int
+    page: int
+    limit: int
+    pages: int
+
+
+class ObligationStatsResponse(BaseModel):
+    total: int
+    overdue: int
+    upcoming_7_days: int
+    by_status: dict[str, int]
 
 
 class ObligationCreate(BaseModel):

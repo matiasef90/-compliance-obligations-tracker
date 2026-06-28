@@ -1,11 +1,13 @@
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_session
+from app.domain.obligation import ObligationStatus
 from app.schemas.obligation import (
     ObligationCreate,
     ObligationListResponse,
     ObligationResponse,
+    ObligationStatsResponse,
     ObligationUpdate,
     TransitionRequest,
 )
@@ -38,11 +40,40 @@ def _dto_to_response(dto: ObligationDTO) -> ObligationResponse:
     )
 
 
-@router.get("", response_model=ObligationListResponse)
-async def list_obligations(session: AsyncSession = Depends(get_session)) -> ObligationListResponse:
+@router.get("/stats", response_model=ObligationStatsResponse)
+async def get_stats(session: AsyncSession = Depends(get_session)) -> ObligationStatsResponse:
     service = ObligationService(session)
-    items = await service.list_obligations()
-    return ObligationListResponse(items=[_dto_to_response(i) for i in items], total=len(items))
+    dto = await service.get_stats()
+    return ObligationStatsResponse(
+        total=dto.total,
+        overdue=dto.overdue,
+        upcoming_7_days=dto.upcoming_7_days,
+        by_status=dto.by_status,
+    )
+
+
+@router.get("", response_model=ObligationListResponse)
+async def list_obligations(
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=10, ge=1, le=100),
+    status: ObligationStatus | None = Query(default=None),
+    search: str | None = Query(default=None, min_length=1),
+    session: AsyncSession = Depends(get_session),
+) -> ObligationListResponse:
+    service = ObligationService(session)
+    result = await service.list_obligations(
+        page=page,
+        limit=limit,
+        status=status.value if status else None,
+        search=search,
+    )
+    return ObligationListResponse(
+        items=[_dto_to_response(i) for i in result.items],
+        total=result.total,
+        page=result.page,
+        limit=result.limit,
+        pages=result.pages,
+    )
 
 
 @router.post("", response_model=ObligationResponse, status_code=status.HTTP_201_CREATED)
