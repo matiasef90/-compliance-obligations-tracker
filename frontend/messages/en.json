@@ -48,6 +48,12 @@
       "in_progress": "In progress",
       "submitted": "Submitted",
       "done": "Done"
+    },
+    "pagination": {
+      "previous": "Previous",
+      "next": "Next",
+      "pageOf": "Page {page} of {pages}",
+      "results": "{total} results"
     }
   },
   "detail": {

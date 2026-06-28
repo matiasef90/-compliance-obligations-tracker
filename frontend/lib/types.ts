@@ -41,3 +41,18 @@ export interface ApiError {
   detail: string;
   status: number;
 }
+
+export interface ObligationListResult {
+  items: Obligation[];
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+}
+
+export interface ObligationStats {
+  total: number;
+  overdue: number;
+  upcoming_7_days: number;
+  by_status: Record<ObligationStatus, number>;
+}
