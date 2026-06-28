@@ -58,6 +58,8 @@
   },
   "detail": {
     "title": "Detalle de obligación",
+    "edit": "Editar",
+    "save": "Guardar cambios",
     "description": "Descripción",
     "taxId": "CUIT / Tax ID",
     "requiresDocument": "Requiere documento",
@@ -85,6 +87,7 @@
   },
   "form": {
     "title": "Nueva obligación",
+    "editTitle": "Editar obligación",
     "datePicker": {
       "placeholder": "Seleccionar fecha",
       "clear": "Limpiar",

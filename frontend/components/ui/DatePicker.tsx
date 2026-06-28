@@ -6,6 +6,7 @@ interface DatePickerProps {
   name: string;
   required?: boolean;
   locale?: string;
+  initialValue?: string;
   labels?: {
     placeholder?: string;
     clear?: string;
@@ -18,6 +19,7 @@ export function DatePicker({
   name,
   required,
   locale = "default",
+  initialValue,
   labels = {},
   className,
 }: DatePickerProps) {
@@ -43,6 +45,15 @@ export function DatePicker({
     d.setHours(0, 0, 0, 0);
     return d;
   }, []);
+
+  useEffect(() => {
+    if (!initialValue) return;
+    const [y, m, d] = initialValue.split("-").map(Number);
+    const date = new Date(y, m - 1, d);
+    setSelected(date);
+    setViewYear(y);
+    setViewMonth(m - 1);
+  }, [initialValue]);
 
   // Locale-aware weekday headers starting on Sunday (Jan 5 2025 = Sunday)
   const DAYS = useMemo(

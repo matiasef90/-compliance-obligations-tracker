@@ -58,6 +58,8 @@
   },
   "detail": {
     "title": "Obligation detail",
+    "edit": "Edit",
+    "save": "Save changes",
     "description": "Description",
     "taxId": "Tax ID",
     "requiresDocument": "Requires document",
@@ -85,6 +87,7 @@
   },
   "form": {
     "title": "New obligation",
+    "editTitle": "Edit obligation",
     "datePicker": {
       "placeholder": "Select date",
       "clear": "Clear",
