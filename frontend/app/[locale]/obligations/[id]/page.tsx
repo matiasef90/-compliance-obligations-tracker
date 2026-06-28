@@ -104,7 +104,7 @@ export default async function ObligationDetailPage({ params }: PageProps) {
           {/* Columna derecha — audit trail */}
           <div className="bg-white rounded-xl border border-gray-100 p-6 h-fit">
             <h3 className="text-sm font-semibold text-gray-900 mb-4">{t("auditTrail")}</h3>
-            <AuditTrail entries={obligation.audit_trail} locale={locale} />
+            <AuditTrail entries={obligation.audit_trail} createdAt={obligation.created_at} locale={locale} />
           </div>
         </div>
       </div>
