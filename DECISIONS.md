@@ -584,3 +584,54 @@ new Date(`${o.due_date}T00:00:00`).toLocaleDateString(locale)
 ```
 
 El sufijo `T00:00:00` (sin zona horaria) es intencional: `new Date("2026-12-31")` se parsea como UTC midnight, lo que en zonas horarias con offset negativo mostraría el día anterior. Con `T00:00:00` se parsea en hora local, evitando el off-by-one. El mismo patrón se usa en `AuditTrail` con `toLocaleString(locale)` para fechas con hora.
+
+---
+
+#### 19. Paginación server-side con filtros en la URL
+
+**Contexto:** la lista de obligaciones no tenía paginación ni filtros en el backend; traía todos los registros de una vez.
+
+**Decisión de diseño:** se implementó paginación server-side con LIMIT/OFFSET en el backend y la URL como fuente de verdad para los filtros. La URL contiene `?page=N&status=X&search=Y`. La página Server Component lee `searchParams`, hace dos fetches en paralelo (`/obligations/stats` para los KPIs globales y `/obligations?page&limit&status&search` para la lista paginada), y pasa los datos a componentes Client solo para la interactividad de filtros y navegación de páginas.
+
+**Por qué server-side y no client-side:** cargar todos los registros en el cliente no escala. Con server-side el payload por página es fijo (10 ítems), los filtros y el orden corren en SQL (índices, ILIKE), y los KPIs siempre reflejan el total global independientemente del filtro activo.
+
+**Por qué la URL como fuente de verdad:** permite compartir links filtrados, mantiene el estado al recargar la página, y el botón atrás del browser funciona correctamente. La alternativa (estado en `useState`) no sobrevive la recarga y no es bookmarkable.
+
+---
+
+#### 20. Separación de endpoint `/stats` del endpoint de lista paginada
+
+**Contexto:** los KPIs (total global, vencidas, próximas, por estado) son independientes del filtro activo en la lista.
+
+**Decisión de diseño:** se creó `GET /obligations/stats` como endpoint separado que siempre devuelve conteos globales. La lista paginada `GET /obligations` devuelve `total` filtrado (para mostrar "N resultados" en la paginación). Ambos se fetchen en paralelo con `Promise.all` en la página.
+
+**Por qué no incluir stats en la respuesta de la lista:** los KPIs son contexto global que no cambia con el filtro del usuario. Mezclarlos en la lista requeriría dos queries diferentes según si hay filtro o no, complicando el contrato del endpoint.
+
+**Nota de implementación:** `GET /obligations/stats` se define antes de `GET /obligations/{id}` en el router de FastAPI para que el string literal `"stats"` no sea capturado como un ID dinámico.
+
+---
+
+#### 21. `searchParamsRef` pattern para debounce con `useSearchParams`
+
+**Problema:** el componente `ObligationsFilters` debouncea el input de búsqueda 300ms antes de escribir en la URL. Para leer los query params actuales dentro del callback del timeout (y no sobreescribir el estado de paginación o filtros activos), se necesita acceso fresco a `searchParams`.
+
+**Primera solución (con bug):** agregar `searchParams` al array de dependencias del `useEffect`. Esto causó un bug: cada click en "página siguiente" actualizaba `searchParams`, reiniciando el timer de debounce. Después de 300ms de inactividad el timer disparaba y navegaba a una URL sin `page`, reseteando la paginación silenciosamente.
+
+**Solución correcta:** usar un ref como proxy sincrónico de `searchParams`:
+
+```tsx
+const searchParamsRef = useRef(searchParams);
+useEffect(() => {
+  searchParamsRef.current = searchParams;
+}, [searchParams]);
+
+useEffect(() => {
+  const timer = setTimeout(() => {
+    const params = new URLSearchParams(searchParamsRef.current.toString());
+    // ... mutar params y hacer router.push
+  }, 300);
+  return () => clearTimeout(timer);
+}, [search, pathname, router]); // sin searchParams como dep
+```
+
+El ref siempre tiene el valor actual porque el efecto de sync se ejecuta sincrónicamente después de cada render. El debounce solo se reinicia cuando el usuario escribe (`search`), no cuando cambia la paginación.
