@@ -18,11 +18,15 @@ export function ObligationsFilters() {
   const [status, setStatus] = useState(searchParams.get("status") ?? "all");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchParamsRef = useRef(searchParams);
+  useEffect(() => {
+    searchParamsRef.current = searchParams;
+  }, [searchParams]);
 
   // Debounce search → URL
   useEffect(() => {
     const timer = setTimeout(() => {
-      const params = new URLSearchParams(searchParams.toString());
+      const params = new URLSearchParams(searchParamsRef.current.toString());
       if (search) {
         params.set("search", search);
       } else {
@@ -32,7 +36,7 @@ export function ObligationsFilters() {
       router.push(`${pathname}?${params.toString()}`);
     }, 300);
     return () => clearTimeout(timer);
-  }, [search, searchParams, pathname, router]);
+  }, [search, pathname, router]);
 
   // Close dropdown on outside click
   useEffect(() => {
