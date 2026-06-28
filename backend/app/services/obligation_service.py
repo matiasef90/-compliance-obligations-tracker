@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.domain.obligation import (
+    DocumentRequiredError,
     ObligationStatus,
     ObligationType,
     get_valid_transitions,
@@ -144,6 +145,8 @@ class ObligationService:
         obligation = await self._repo.get_by_id(id)
         if obligation is None:
             raise NotFoundError(f"Obligation {id} not found")
+        if not obligation.requires_document:
+            raise DocumentRequiredError("This obligation does not require a document")
         filename = random.choice(_MOCK_DOC_FILENAMES)
         url = f"{settings.base_url}/static/mock-docs/{filename}"
         obligation = await self._repo.update(id, {"document_url": url}, obligation.version)

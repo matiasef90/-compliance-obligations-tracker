@@ -161,3 +161,24 @@ async def test_upload_document_unknown_id_returns_404(client):
 
     assert response.status_code == 404
     assert response.json()["error"] == "NOT_FOUND"
+
+
+async def test_upload_document_on_non_document_obligation_returns_422(client):
+    create = await client.post("/obligations", json={
+        "type": "annual_report",
+        "title": "No Doc Test",
+        "due_date": "2027-06-30",
+        "owner": "tester",
+        "company_tax_id": "30-99999999-9",
+        "requires_document": False,
+    })
+    assert create.status_code == 201
+    obligation_id = create.json()["id"]
+
+    response = await client.post(
+        f"/obligations/{obligation_id}/upload-document",
+        files={"file": ("report.pdf", b"fake content", "application/pdf")},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"] == "DOCUMENT_REQUIRED"
