@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { fetchObligation } from "@/lib/api";
+import { formatDate } from "@/lib/format";
 import { Badge } from "@/components/ui/Badge";
 import { AuditTrail } from "@/components/obligations/AuditTrail";
 import { TransitionButtons } from "@/components/obligations/TransitionButtons";
@@ -53,7 +54,7 @@ export default async function ObligationDetailPage({ params }: PageProps) {
               <dl className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <dt className="text-gray-500 font-medium">{tObl("dueDate")}</dt>
-                  <dd className="text-gray-900 mt-0.5">{obligation.due_date}</dd>
+                  <dd className="text-gray-900 mt-0.5">{formatDate(obligation.due_date, locale)}</dd>
                 </div>
                 <div>
                   <dt className="text-gray-500 font-medium">{tObl("owner")}</dt>

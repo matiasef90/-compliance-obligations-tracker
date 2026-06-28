@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/Badge";
+import { formatDate } from "@/lib/format";
 import type { Obligation } from "@/lib/types";
 
 interface ObligationsListProps {
@@ -37,7 +38,7 @@ export function ObligationsList({ items, locale }: ObligationsListProps) {
               <td className={`px-4 py-3 whitespace-nowrap ${o.overdue ? "text-red-700" : "text-gray-500"}`}>{t(`type_labels.${o.type}`)}</td>
               <td className={`px-4 py-3 whitespace-nowrap ${o.overdue ? "text-red-700" : "text-gray-500"}`}>{o.owner}</td>
               <td className={`px-4 py-3 whitespace-nowrap font-medium ${o.overdue ? "text-red-700" : "text-gray-500"}`}>
-                {new Date(`${o.due_date}T00:00:00`).toLocaleDateString(locale)}
+                {formatDate(o.due_date, locale)}
               </td>
               <td className="px-4 py-3">
                 <div className="flex items-center gap-2">

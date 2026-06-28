@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/Badge";
+import { formatDate } from "@/lib/format";
 import type { Obligation } from "@/lib/types";
 
 interface ObligationCardProps {
@@ -29,7 +30,7 @@ export function ObligationCard({ obligation, locale }: ObligationCardProps) {
           </div>
         </div>
         <div className="mt-3 flex items-center gap-4 text-xs text-gray-500">
-          <span>{t("dueDate")}: {obligation.due_date}</span>
+          <span>{t("dueDate")}: {formatDate(obligation.due_date, locale)}</span>
           <span>{t("owner")}: {obligation.owner}</span>
         </div>
       </div>
