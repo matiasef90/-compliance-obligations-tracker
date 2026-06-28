@@ -3,7 +3,8 @@
     "obligations": "Obligations"
   },
   "topbar": {
-    "newObligation": "New obligation"
+    "newObligation": "New obligation",
+    "edit": "Edit"
   },
   "obligations": {
     "title": "Obligations",

@@ -29,7 +29,7 @@ export default async function ObligationDetailPage({ params }: PageProps) {
 
   return (
     <div>
-      <Topbar title={t("title")} locale={locale} />
+      <Topbar title={t("title")} locale={locale} editHref={`/${locale}/obligations/${obligation.id}/edit`} />
       <div className="p-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Columna izquierda — datos */}
