@@ -515,3 +515,38 @@ router.push(pathname, { locale: next });
 **Código generado (iteración previa):** `<select>` nativo. Visualmente inconsistente con el resto de la UI porque el panel desplegable lo renderiza el sistema operativo con su propio estilo, ignorando cualquier CSS de Tailwind sobre los `<option>`.
 
 **Decisión de diseño:** se reemplazó por un dropdown completamente custom: botón trigger con el mismo estilo de los inputs (`rounded-lg border border-gray-200 bg-white`), panel con `rounded-xl border border-gray-100 bg-white shadow-sm`, items con `hover:bg-gray-50`, y el ítem seleccionado con `bg-violet-50 text-accent`. La flecha del trigger rota 180° al abrirse. El cierre al hacer click fuera se maneja con `useEffect` + `mousedown` sobre `document`.
+
+---
+
+#### 14. `StatusCycleCard`: desborde de contenido bloqueaba los clicks en los dots de navegación
+
+**Código generado:** el contenedor de cross-fade tenía altura fija `h-9` (36px). El contenido real — número `text-2xl` (~32px) + label `text-xs` (~18px) — ocupa ~50px y desbordaba hacia abajo, cubriendo los dots de navegación y bloqueando sus clicks. La card parecía funcionar (ciclo visual correcto) pero el pinning era imposible.
+
+**Corrección:** altura aumentada a `h-12` (48px) para contener el contenido sin desborde. Se agregó `pointer-events-none` al contenedor para que el overflow no intercepte eventos aunque el contenido lo sobrepase. Ajustes visuales: `mt-0.5` → `mt-1.5`, dot del label `w-1.5` → `w-2`, gaps aumentados.
+
+---
+
+#### 15. `StatusCycleCard`: rotación se detenía por stale closure en el callback del intervalo
+
+**Código generado:** el intervalo de rotación se manejaba con `useEffect` + `setInterval`. En React 18/19 Strict Mode, los efectos se invocan dos veces en desarrollo (mount → cleanup → mount), lo que podía dejar el closure del callback con un valor desactualizado de `pinned` o `statuses.length`.
+
+**Corrección:** se reemplazó el enfoque por `useRef` para el timer y un `pinnedRef` sincrónico:
+
+```tsx
+const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+const pinnedRef = useRef(false);
+
+useEffect(() => {
+  pinnedRef.current = pinned;
+  if (timerRef.current) clearInterval(timerRef.current);
+  if (!pinned) {
+    timerRef.current = setInterval(() => {
+      if (pinnedRef.current) return;
+      setIndex((i) => (i + 1) % statuses.length);
+    }, 2500);
+  }
+  return () => { if (timerRef.current) clearInterval(timerRef.current); };
+}, [pinned, statuses.length]);
+```
+
+`pinnedRef.current` se actualiza sincrónicamente en cada render, evitando que el callback del intervalo lea un valor stale de `pinned`.
