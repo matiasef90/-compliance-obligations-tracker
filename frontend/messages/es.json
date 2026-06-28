@@ -85,6 +85,11 @@
   },
   "form": {
     "title": "Nueva obligación",
+    "datePicker": {
+      "placeholder": "Seleccionar fecha",
+      "clear": "Limpiar",
+      "today": "Hoy"
+    },
     "titleField": "Título",
     "typeField": "Tipo",
     "descriptionField": "Descripción",
