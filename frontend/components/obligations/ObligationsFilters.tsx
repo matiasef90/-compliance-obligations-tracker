@@ -32,7 +32,7 @@ export function ObligationsFilters() {
       router.push(`${pathname}?${params.toString()}`);
     }, 300);
     return () => clearTimeout(timer);
-  }, [search]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, searchParams, pathname, router]);
 
   // Close dropdown on outside click
   useEffect(() => {
