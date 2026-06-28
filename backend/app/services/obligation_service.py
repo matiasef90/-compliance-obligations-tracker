@@ -1,9 +1,11 @@
+import random
 from dataclasses import dataclass
 from datetime import date, datetime
 from math import ceil
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.domain.obligation import (
     ObligationStatus,
     ObligationType,
@@ -60,6 +62,9 @@ class StatsDTO:
     overdue: int
     upcoming_7_days: int
     by_status: dict[str, int]
+
+
+_MOCK_DOC_FILENAMES = ["doc1.png", "doc2.png", "doc3.png", "doc4.png"]
 
 
 class ObligationService:
@@ -131,6 +136,17 @@ class ObligationService:
             id, {"status": to_status.value}, version
         )
         await self._audit_repo.log(id, from_status, to_status.value)
+        await self._session.commit()
+        obligation = await self._repo.get_by_id(id)
+        return self._to_dto(obligation)  # type: ignore[arg-type]
+
+    async def upload_document(self, id: str) -> ObligationDTO:
+        obligation = await self._repo.get_by_id(id)
+        if obligation is None:
+            raise NotFoundError(f"Obligation {id} not found")
+        filename = random.choice(_MOCK_DOC_FILENAMES)
+        url = f"{settings.base_url}/static/mock-docs/{filename}"
+        obligation = await self._repo.update(id, {"document_url": url}, obligation.version)
         await self._session.commit()
         obligation = await self._repo.get_by_id(id)
         return self._to_dto(obligation)  # type: ignore[arg-type]

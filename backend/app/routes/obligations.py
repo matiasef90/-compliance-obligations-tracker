@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, File, Query, Response, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_session
@@ -115,4 +115,15 @@ async def transition_obligation(
 ) -> ObligationResponse:
     service = ObligationService(session)
     dto = await service.transition_status(id, body.to_status, body.version)
+    return _dto_to_response(dto)
+
+
+@router.post("/{id}/upload-document", response_model=ObligationResponse)
+async def upload_document(
+    id: str,
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_session),
+) -> ObligationResponse:
+    service = ObligationService(session)
+    dto = await service.upload_document(id)
     return _dto_to_response(dto)

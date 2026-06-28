@@ -127,3 +127,37 @@ async def test_get_stats_returns_counts(client):
     assert "by_status" in data
     assert data["total"] >= 1
     assert data["by_status"]["pending"] >= 1
+
+
+async def test_upload_document_sets_mock_url(client):
+    create = await client.post("/obligations", json={
+        "type": "annual_report",
+        "title": "Upload Test",
+        "due_date": "2027-06-30",
+        "owner": "tester",
+        "company_tax_id": "30-99999999-9",
+        "requires_document": True,
+    })
+    assert create.status_code == 201
+    obligation_id = create.json()["id"]
+
+    response = await client.post(
+        f"/obligations/{obligation_id}/upload-document",
+        files={"file": ("report.pdf", b"fake pdf content", "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["document_url"] is not None
+    assert "/static/mock-docs/" in data["document_url"]
+    assert data["document_url"].endswith(".png")
+
+
+async def test_upload_document_unknown_id_returns_404(client):
+    response = await client.post(
+        "/obligations/00000000-0000-0000-0000-000000000000/upload-document",
+        files={"file": ("report.pdf", b"fake pdf content", "application/pdf")},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["error"] == "NOT_FOUND"
