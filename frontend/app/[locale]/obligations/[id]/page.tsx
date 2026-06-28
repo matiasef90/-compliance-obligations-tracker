@@ -4,6 +4,7 @@ import { fetchObligation } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { Badge } from "@/components/ui/Badge";
 import { AuditTrail } from "@/components/obligations/AuditTrail";
+import { DocumentUpload } from "@/components/obligations/DocumentUpload";
 import { TransitionButtons } from "@/components/obligations/TransitionButtons";
 import { Topbar } from "@/components/layout/Topbar";
 
@@ -68,7 +69,13 @@ export default async function ObligationDetailPage({ params }: PageProps) {
                   <dt className="text-gray-500 font-medium">{t("requiresDocument")}</dt>
                   <dd className="text-gray-900 mt-0.5">{obligation.requires_document ? t("yes") : t("no")}</dd>
                 </div>
-                {obligation.document_url && (
+                {obligation.requires_document ? (
+                  <DocumentUpload
+                    id={obligation.id}
+                    locale={locale}
+                    documentUrl={obligation.document_url}
+                  />
+                ) : obligation.document_url ? (
                   <div className="col-span-2">
                     <dt className="text-gray-500 font-medium">{t("documentUrl")}</dt>
                     <dd className="mt-0.5">
@@ -77,7 +84,7 @@ export default async function ObligationDetailPage({ params }: PageProps) {
                       </a>
                     </dd>
                   </div>
-                )}
+                ) : null}
                 {obligation.description && (
                   <div className="col-span-2">
                     <dt className="text-gray-500 font-medium">{t("description")}</dt>
