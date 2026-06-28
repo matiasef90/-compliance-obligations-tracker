@@ -6,6 +6,7 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://compliance:compliance@localhost:5432/compliance_db"
     allowed_origins: str = "http://localhost:3000"
+    base_url: str = "http://localhost:8000"
 
     @property
     def allowed_origins_list(self) -> list[str]:

@@ -1,6 +1,8 @@
+import os
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.domain.obligation import DocumentRequiredError, InvalidTransitionError
@@ -8,6 +10,9 @@ from app.repositories.obligation_repo import ConcurrencyError, NotFoundError
 from app.routes.obligations import router as obligations_router
 
 app = FastAPI(title="Compliance Obligations Tracker")
+
+_static_dir = os.path.join(os.path.dirname(__file__), "..", "static")
+app.mount("/static", StaticFiles(directory=_static_dir), name="static")
 
 app.add_middleware(
     CORSMiddleware,
