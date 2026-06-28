@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import date, datetime
+from math import ceil
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -44,15 +45,55 @@ class ObligationDTO:
     updated_at: datetime
 
 
+@dataclass
+class PagedResult:
+    items: list[ObligationDTO]
+    total: int
+    page: int
+    limit: int
+    pages: int
+
+
+@dataclass
+class StatsDTO:
+    total: int
+    overdue: int
+    upcoming_7_days: int
+    by_status: dict[str, int]
+
+
 class ObligationService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._repo = ObligationRepo(session)
         self._audit_repo = AuditRepo(session)
 
-    async def list_obligations(self) -> list[ObligationDTO]:
-        obligations = await self._repo.get_all()
-        return [self._to_dto(o) for o in obligations]
+    async def list_obligations(
+        self,
+        page: int = 1,
+        limit: int = 10,
+        status: str | None = None,
+        search: str | None = None,
+    ) -> PagedResult:
+        items = await self._repo.get_paginated(page, limit, status, search)
+        total = await self._repo.count(status, search)
+        pages = max(1, ceil(total / limit))
+        return PagedResult(
+            items=[self._to_dto(o) for o in items],
+            total=total,
+            page=page,
+            limit=limit,
+            pages=pages,
+        )
+
+    async def get_stats(self) -> StatsDTO:
+        raw = await self._repo.get_stats()
+        return StatsDTO(
+            total=raw["total"],
+            overdue=raw["overdue"],
+            upcoming_7_days=raw["upcoming_7_days"],
+            by_status=raw["by_status"],
+        )
 
     async def get_obligation(self, id: str) -> ObligationDTO:
         obligation = await self._repo.get_by_id(id)
