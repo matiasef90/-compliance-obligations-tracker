@@ -1,12 +1,10 @@
 import { useTranslations } from "next-intl";
-import type { Obligation } from "@/lib/types";
+import type { ObligationStats } from "@/lib/types";
 import { StatusCycleCard } from "./StatusCycleCard";
 
 interface ObligationsKPIsProps {
-  obligations: Obligation[];
+  stats: ObligationStats;
 }
-
-const UPCOMING_DAYS = 7;
 
 type Variant = "default" | "danger" | "warning";
 
@@ -26,33 +24,21 @@ function KPICard({ label, value, variant = "default" }: { label: string; value: 
   );
 }
 
-export function ObligationsKPIs({ obligations }: ObligationsKPIsProps) {
+export function ObligationsKPIs({ stats }: ObligationsKPIsProps) {
   const t = useTranslations("obligations.kpi");
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const upcomingThreshold = new Date(today);
-  upcomingThreshold.setDate(upcomingThreshold.getDate() + UPCOMING_DAYS);
-
-  const overdue = obligations.filter((o) => o.overdue).length;
-  const upcoming = obligations.filter((o) => {
-    if (o.overdue || o.status === "done" || o.status === "submitted") return false;
-    const due = new Date(`${o.due_date}T00:00:00`);
-    return due >= today && due <= upcomingThreshold;
-  }).length;
-
   const statuses = [
-    { label: t("pending"),     value: obligations.filter((o) => o.status === "pending").length,     variant: "neutral" as const },
-    { label: t("in_progress"), value: obligations.filter((o) => o.status === "in_progress").length, variant: "info"    as const },
-    { label: t("submitted"),   value: obligations.filter((o) => o.status === "submitted").length,   variant: "purple"  as const },
-    { label: t("done"),        value: obligations.filter((o) => o.status === "done").length,        variant: "success" as const },
+    { label: t("pending"),     value: stats.by_status.pending     ?? 0, variant: "neutral" as const },
+    { label: t("in_progress"), value: stats.by_status.in_progress ?? 0, variant: "info"    as const },
+    { label: t("submitted"),   value: stats.by_status.submitted   ?? 0, variant: "purple"  as const },
+    { label: t("done"),        value: stats.by_status.done        ?? 0, variant: "success" as const },
   ];
 
   return (
     <div className="grid grid-cols-4 gap-3">
-      <KPICard label={t("total")}    value={obligations.length} />
-      <KPICard label={t("overdue")}  value={overdue}            variant="danger" />
-      <KPICard label={t("upcoming")} value={upcoming}           variant="warning" />
+      <KPICard label={t("total")}    value={stats.total} />
+      <KPICard label={t("overdue")}  value={stats.overdue}         variant="danger" />
+      <KPICard label={t("upcoming")} value={stats.upcoming_7_days} variant="warning" />
       <StatusCycleCard statuses={statuses} />
     </div>
   );
