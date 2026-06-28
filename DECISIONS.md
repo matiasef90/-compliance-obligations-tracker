@@ -480,6 +480,36 @@ const [t, tStatus] = await Promise.all([
 
 ---
 
+#### 13. Locale switcher: `usePathname` de `next/navigation` no incluye el prefijo de locale en next-intl v4
+
+**Código generado:** el switcher usaba `usePathname` y `useRouter` de `next/navigation`, y reemplazaba manualmente el segmento de locale en el path:
+
+```ts
+const segments = pathname.split("/");
+segments[1] = next;
+router.push(segments.join("/"));
+```
+
+**Problema:** en Next.js 15 + next-intl v4, el middleware reescribe la URL internamente y `usePathname` de `next/navigation` devuelve el path **sin** el prefijo de locale (e.g., `/obligations` en lugar de `/es/obligations`). La lógica de `segments[1] = next` operaba sobre `["", "obligations"]` y producía `/en` en lugar de `/en/obligations`, perdiendo la página actual al cambiar de idioma.
+
+**Evidencia observada:** los logs del servidor mostraban `GET /en 307` seguido de `GET /en/obligations 200` — un redirect innecesario a través de la root page.
+
+**Corrección:** se creó `i18n/navigation.ts` con `createNavigation(routing)` — la API oficial de next-intl v4 — y el `LocaleSwitcher` usa `usePathname` y `useRouter` de ese módulo. El `usePathname` de next-intl devuelve el path sin locale, y el `useRouter` acepta `{ locale }` como opción de navegación:
+
+```ts
+// Antes
+import { useRouter, usePathname } from "next/navigation";
+const segments = pathname.split("/");
+segments[1] = next;
+router.push(segments.join("/"));
+
+// Después
+import { useRouter, usePathname } from "@/i18n/navigation";
+router.push(pathname, { locale: next });
+```
+
+---
+
 #### 12. Filtro de estado: `<select>` nativo reemplazado por dropdown personalizado
 
 **Código generado (iteración previa):** `<select>` nativo. Visualmente inconsistente con el resto de la UI porque el panel desplegable lo renderiza el sistema operativo con su propio estilo, ignorando cualquier CSS de Tailwind sobre los `<option>`.
