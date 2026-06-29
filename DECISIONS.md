@@ -164,31 +164,46 @@ Optimistic locking con campo `version INTEGER` en la tabla `obligations`.
 
 ### Reglas implementadas
 
-1. **Almacenamiento:** plaintext en PostgreSQL (cifrado en tránsito vía TLS)
-2. **Lectura:** enmascarado en TODOS los Pydantic response schemas → `••••6789`
+1. **Almacenamiento:** cifrado en reposo con AES-256-GCM en la capa de repositorio
+2. **Lectura:** descifrado en el repositorio → enmascarado en el servicio → `••••6789` en el response
 3. **Logs:** excluido del middleware de logging; nunca aparece en trazas
+
+### Arquitectura del cifrado
+
+`app/crypto.py` — módulo puro sin dependencias de framework:
+```python
+def encrypt(plaintext: str, key: bytes) -> str  # base64(nonce[12] + ciphertext + tag[16])
+def decrypt(ciphertext: str, key: bytes) -> str  # raises InvalidTag si clave o ciphertext inválidos
+```
+
+La clave (32 bytes, AES-256) vive en `ENCRYPTION_KEY` (env var), decodificada en `settings.encryption_key_bytes`. El repositorio llama a `encrypt`/`decrypt` explícitamente — el servicio, las rutas y los schemas no saben que el campo está cifrado.
+
+**Por qué en el repositorio y no en un SQLAlchemy TypeDecorator:** el TypeDecorator acopla la lógica cripto a SQLAlchemy. Si se cambia el ORM, `crypto.py` no se toca — solo el repo. Ver decisión de arquitectura discutida durante el diseño.
 
 ### Implementación de máscara
 
-Función pura en el dominio:
+Función pura en el dominio (sin cambios):
 ```python
 def mask_tax_id(tax_id: str) -> str:
-    if len(tax_id) <= 4:
-        return "••••"
     return "••••" + tax_id[-4:]
 ```
 
-Llamada exclusivamente en `ObligationService._to_dto()`. El response schema de Pydantic tiene `company_tax_id: str` pero el valor ya llega enmascarado del servicio. El campo raw jamás sale del servicio.
+Llamada en `ObligationService._to_dto()` sobre el plaintext ya descifrado por el repo.
+
+### Decisión diferida: AAD (Additional Authenticated Data)
+
+La implementación actual no pasa AAD al cifrar. Esto significa que GCM no vincula el ciphertext a la fila específica: alguien con acceso de escritura a la DB podría copiar el valor cifrado de la fila A a la fila B sin que la verificación del tag falle.
+
+**Decisión:** diferido. Requiere acceso de escritura directo a la DB (compromiso ya severo por sí mismo). La solución correcta — pasar `obligation.id.encode()` como AAD — se implementará junto con la migración a KMS (key rotation versionada), donde el rediseño de la firma de `encrypt`/`decrypt` ya es necesario de todas formas.
 
 ### Alternativas consideradas para almacenamiento
 
 | Alternativa | Pros | Contras | Decisión |
 |---|---|---|---|
-| **Plaintext + máscara en lectura** | Simple; sin overhead | Si la DB se compromete, dato expuesto en claro | **Elegida para este scope** |
-| Cifrado a nivel aplicación (AES-256) | Protección en reposo | Gestión de claves, rotación, overhead de descifrado | Mejora documentada para producción real |
-| Cifrado a nivel columna (pgcrypto) | Transparente para la app | Depende del motor; complejidad de setup | Rechazada |
-
-**Con más tiempo:** implementaría cifrado a nivel aplicación con clave en variable de entorno (o KMS en producción), y test que verifica que el valor en DB es opaco.
+| Plaintext + máscara | Simple | DB comprometida expone dato | Descartada |
+| **Cifrado en repo + crypto.py puro** | Portabilidad; crypto auditabla en un módulo | Requiere gestión de clave | **Elegida** |
+| SQLAlchemy TypeDecorator | Transparente al código | Acoplado al ORM | Descartada |
+| Cifrado a nivel columna (pgcrypto) | Transparente para la app | Depende del motor DB | Descartada |
 
 ---
 
