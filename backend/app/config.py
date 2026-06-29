@@ -1,3 +1,5 @@
+import base64
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -7,10 +9,15 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://compliance:compliance@localhost:5432/compliance_db"
     allowed_origins: str = "http://localhost:3000"
     base_url: str = "http://localhost:8000"
+    encryption_key: str
 
     @property
     def allowed_origins_list(self) -> list[str]:
         return [o.strip() for o in self.allowed_origins.split(",")]
+
+    @property
+    def encryption_key_bytes(self) -> bytes:
+        return base64.b64decode(self.encryption_key)
 
 
 settings = Settings()
