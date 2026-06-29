@@ -48,6 +48,7 @@ class ObligationRepo:
                     Obligation.type.ilike(pattern),
                 )
             )
+        query = query.execution_options(populate_existing=True)
         query = query.order_by(Obligation.due_date.asc())
         query = query.limit(limit).offset((page - 1) * limit)
         result = await self._session.execute(query)

@@ -17,7 +17,12 @@ class Settings(BaseSettings):
 
     @property
     def encryption_key_bytes(self) -> bytes:
-        return base64.b64decode(self.encryption_key)
+        key = base64.b64decode(self.encryption_key)
+        if len(key) != 32:
+            raise ValueError(
+                f"ENCRYPTION_KEY must decode to exactly 32 bytes (AES-256); got {len(key)}"
+            )
+        return key
 
 
 settings = Settings()
