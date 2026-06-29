@@ -91,7 +91,6 @@ Ver [DECISIONS.md](./DECISIONS.md).
 
 - Auth / sesiones
 - Subida real de documentos (mock de URL)
-- Paginación / búsqueda full-text
 - CI (GitHub Actions)
 
 ## Con más tiempo
@@ -100,4 +99,3 @@ Ver [DECISIONS.md](./DECISIONS.md).
 - Auth con JWT o sesiones
 - Subida real de documentos a S3/R2
 - CI con lint + tests en ambas capas
-- Paginación y búsqueda
