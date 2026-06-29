@@ -650,3 +650,43 @@ useEffect(() => {
 ```
 
 El ref siempre tiene el valor actual porque el efecto de sync se ejecuta sincrónicamente después de cada render. El debounce solo se reinicia cuando el usuario escribe (`search`), no cuando cambia la paginación.
+
+---
+
+## 12. Decisiones y cambios solicitados durante el proyecto
+
+Esta sección registra exclusivamente las decisiones que tomé explícitamente eligiendo entre alternativas, y los cambios que solicité a lo largo del desarrollo. Las secciones anteriores documentan el diseño general; esta deja trazabilidad de lo que decidí y pedí.
+
+### Decisiones elegidas entre alternativas
+
+#### Cifrado de `companyTaxId` — clave en variable de entorno
+
+Ante la pregunta de dónde guardar la clave de cifrado, elegí **variable de entorno** por sobre alternativas como un archivo de secrets o un KMS, por ser lo adecuado para el scope de esta prueba. La migración a KMS queda documentada como mejora productiva.
+
+#### Cifrado en la capa de repositorio, no en un TypeDecorator de SQLAlchemy
+
+Evalué dos enfoques para cifrar `companyTaxId`:
+
+1. **TypeDecorator de SQLAlchemy** — transparente para el código, pero acopla la lógica cripto al ORM.
+2. **Cifrado explícito en la capa de repositorio** con un módulo puro `app/crypto.py`.
+
+Elegí la **opción 2**. La razón decisiva fue la **portabilidad**: pregunté explícitamente si la solución quedaba acoplada a la base de datos / ORM, y al confirmarse que el TypeDecorator lo estaría, opté por el módulo cripto puro. Si se cambia el ORM o el motor de DB, `crypto.py` no se toca — solo el repositorio.
+
+#### AAD (Additional Authenticated Data) — diferido conscientemente
+
+Durante la code review final se identificó que el cifrado no vincula el ciphertext a la fila (sin AAD). Decidí **aplicar los otros tres fixes (validación de longitud de clave, `populate_existing` en paginación, quitar `--reload` del entrypoint) y diferir el AAD**, documentándolo como mejora a implementar con más tiempo, junto con la migración a KMS. El riesgo (swapping de ciphertext entre filas) requiere acceso de escritura directo a la DB, un compromiso ya severo por sí mismo. Ver §6.
+
+#### Ejecución del plan vía Subagent-Driven Development
+
+Para implementar la feature de cifrado elegí ejecutar el plan con **Subagent-Driven Development** (un subagente implementador + review por tarea + review final de rama) por sobre la ejecución inline.
+
+### Cambios solicitados a lo largo del proyecto
+
+| Cambio | Detalle |
+|---|---|
+| Cifrado de `companyTaxId` | Cifrado en reposo con AES-256-GCM en la capa de repositorio (ver decisiones arriba y §6) |
+| Docker full-stack | `docker-compose` que levanta PostgreSQL + backend + frontend en un solo comando, con migraciones automáticas al arrancar |
+| Script de datos de prueba | `scripts/populate_db.py` que puebla 100 obligaciones con estados aleatorios e historial de auditoría coherente |
+| README | Instrucciones de Docker, luego reescritura con overview del propósito del proyecto y redacción más clara y consistente en español |
+| `.gitignore` | Ignorar archivos generados por Next.js y pnpm (`next-env.d.ts`, `tsconfig.tsbuildinfo`, etc.) |
+| Manejo de errores | Excepciones de cripto envueltas en `CryptoError`; `IntegrityError` traducido a `PersistenceError` en `create`/`update`; handlers HTTP para ambos siguiendo el contrato `{error, detail, status}` |
