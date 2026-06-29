@@ -1,11 +1,12 @@
 from math import ceil
 from datetime import date, timedelta
 from sqlalchemy import select, delete, func, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
-from app.crypto import decrypt, encrypt
+from app.crypto import CryptoError, decrypt, encrypt
 from app.db.models import Obligation
 
 
@@ -17,6 +18,10 @@ class NotFoundError(Exception):
     pass
 
 
+class PersistenceError(Exception):
+    pass
+
+
 class ObligationRepo:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -24,9 +29,12 @@ class ObligationRepo:
     def _decrypt_obligation(self, obligation: Obligation) -> Obligation:
         # Write directly to __dict__ to bypass SQLAlchemy's change tracking,
         # preventing the decrypted plaintext from being flushed back to DB.
-        obligation.__dict__["company_tax_id"] = decrypt(
-            obligation.company_tax_id, settings.encryption_key_bytes
-        )
+        try:
+            obligation.__dict__["company_tax_id"] = decrypt(
+                obligation.company_tax_id, settings.encryption_key_bytes
+            )
+        except CryptoError as exc:
+            raise CryptoError(f"Failed to decrypt obligation {obligation.id}") from exc
         return obligation
 
     async def get_paginated(
@@ -125,7 +133,10 @@ class ObligationRepo:
         data["company_tax_id"] = encrypt(data["company_tax_id"], settings.encryption_key_bytes)
         obligation = Obligation(**data)
         self._session.add(obligation)
-        await self._session.flush()
+        try:
+            await self._session.flush()
+        except IntegrityError as exc:
+            raise PersistenceError("Failed to persist obligation") from exc
         return await self.get_by_id(obligation.id)  # type: ignore[return-value]
 
     async def update(self, id: str, data: dict, expected_version: int) -> Obligation:

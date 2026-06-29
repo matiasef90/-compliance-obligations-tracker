@@ -2,9 +2,8 @@ import base64
 import os
 
 import pytest
-from cryptography.exceptions import InvalidTag
 
-from app.crypto import decrypt, encrypt
+from app.crypto import CryptoError, decrypt, encrypt
 
 KEY = os.urandom(32)
 WRONG_KEY = os.urandom(32)
@@ -30,7 +29,7 @@ def test_encrypt_output_is_valid_base64():
 
 def test_decrypt_wrong_key_raises():
     ct = encrypt("30-12345678-9", KEY)
-    with pytest.raises(InvalidTag):
+    with pytest.raises(CryptoError):
         decrypt(ct, WRONG_KEY)
 
 
@@ -38,7 +37,7 @@ def test_decrypt_corrupted_ciphertext_raises():
     ct = encrypt("30-12345678-9", KEY)
     raw = base64.b64decode(ct)
     corrupted = base64.b64encode(raw[:-1] + bytes([raw[-1] ^ 0xFF])).decode()
-    with pytest.raises(InvalidTag):
+    with pytest.raises(CryptoError):
         decrypt(corrupted, KEY)
 
 
