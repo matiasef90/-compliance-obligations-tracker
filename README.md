@@ -4,8 +4,8 @@ Tracker de obligaciones de compliance para empresas: vencimientos, presentacione
 
 ## Stack
 
-- **Backend:** FastAPI + Pydantic v2 + PostgreSQL 15 + SQLAlchemy async
-- **Frontend:** Next.js 14 (App Router) + TypeScript strict + Tailwind CSS
+- **Backend:** FastAPI + Pydantic v2 + PostgreSQL 15 + SQLAlchemy async + Alembic
+- **Frontend:** Next.js 15 (App Router) + TypeScript strict + Tailwind CSS + next-intl (i18n)
 - **Infra local:** docker-compose (PostgreSQL + backend + frontend)
 - **Deploy:** Vercel (frontend) + Render (backend + Postgres)
 
@@ -19,7 +19,8 @@ Levanta PostgreSQL, backend y frontend en un solo comando. Las migraciones corre
 # Primera vez: configurar la clave de cifrado
 cd backend
 cp .env.example .env
-python -c "import os,base64; print('ENCRYPTION_KEY=' + base64.b64encode(os.urandom(32)).decode())" >> .env
+# Editar .env y completar ENCRYPTION_KEY con el valor generado por:
+python -c "import os,base64; print(base64.b64encode(os.urandom(32)).decode())"
 
 # Levantar todo
 cd ..
@@ -49,13 +50,12 @@ docker-compose up -d postgres
 ```bash
 cd backend
 cp .env.example .env
-# Generar ENCRYPTION_KEY y agregarla al .env:
-python -c "import os,base64; print('ENCRYPTION_KEY=' + base64.b64encode(os.urandom(32)).decode())" >> .env
+# Completar ENCRYPTION_KEY en .env con el valor generado por:
+python -c "import os,base64; print(base64.b64encode(os.urandom(32)).decode())"
 
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
-alembic upgrade head
-uvicorn app.main:app --reload
+uv sync
+uv run alembic upgrade head
+uv run uvicorn app.main:app --reload
 ```
 
 API disponible en `http://localhost:8000`. Docs en `http://localhost:8000/docs`.
@@ -65,8 +65,8 @@ API disponible en `http://localhost:8000`. Docs en `http://localhost:8000/docs`.
 ```bash
 cd frontend
 cp .env.local.example .env.local
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 Frontend disponible en `http://localhost:3000`.
