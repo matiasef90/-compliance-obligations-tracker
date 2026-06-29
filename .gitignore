@@ -22,6 +22,11 @@ backend/.env
 node_modules/
 .next/
 frontend/.env.local
+frontend/next-env.d.ts
+frontend/tsconfig.tsbuildinfo
+frontend/pnpm-workspace.yaml
+frontend/.pnpm-build-allow.json
+frontend/verify.mjs
 
 # OS
 .DS_Store
