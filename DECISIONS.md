@@ -1,692 +1,143 @@
 # DECISIONS.md — Compliance Obligations Tracker
 
-Registro de decisiones de arquitectura: qué se eligió, qué se descartó y por qué. Este documento se defiende en la entrega técnica.
+Registro de decisiones de arquitectura: qué se eligió, qué se descartó y por qué.
 
 ---
 
-## 1. Arquitectura general — separación de capas
+## 1. Separación de capas
 
-### Backend: 4 capas estrictas
-
+**Backend — 4 capas estrictas:**
 ```
-routes/          ← HTTP only: parsear request, llamar servicio, devolver response
-services/        ← orquestación: coordina dominio + repos + transacción
-repositories/    ← acceso a datos: SQL, ORM, sin lógica de negocio
-domain/          ← lógica pura: máquina de estados, invariantes, overdue, máscaras
+routes/        ← HTTP: parsear request y devolver response
+services/      ← orquestación: coordina dominio, repos y transacción
+repositories/  ← acceso a datos, sin lógica de negocio
+domain/        ← lógica pura: máquina de estados, invariantes, masks
 ```
+Las capas superiores dependen de las inferiores, nunca al revés. El dominio no importa nada de arriba. Un handler no toca un repo directamente.
 
-**Regla de dependencia:** las capas superiores dependen de las inferiores, nunca al revés. El dominio no importa nada de las capas de arriba. Un handler no toca un repo directamente.
+**Alternativas descartadas:** lógica en el handler (no testeable en aislamiento), Active Record (mezcla persistencia con dominio).
 
-**Por qué:** El enunciado lo exige explícitamente ("la regla no va en el handler"), pero más allá de eso: el dominio puro es testeable sin levantar HTTP ni base de datos. Si la máquina de estados vive en el handler, un test de transición inválida requiere levantar toda la app.
-
-**Alternativa descartada — lógica en el handler:** Común en proyectos pequeños con FastAPI. Rápido de implementar pero no escalable y no testeable de forma aislada. Descartado.
-
-**Alternativa descartada — lógica en el modelo ORM (Active Record):** Rails-style. Mezcla persistencia con dominio. Pydantic + SQLAlchemy no están diseñados para esto; crea acoplamiento fuerte entre el schema de DB y las reglas de negocio. Descartado.
-
----
-
-### Frontend: Server Components por defecto, Client Components por excepción
-
-**Regla:** Todo componente es Server Component a menos que necesite estado local o event handlers del browser.
-
-Client Components usados solo en:
-- `ObligationForm.tsx` — validación en tiempo real, estado de campos
-- `TransitionButtons.tsx` — interactividad inmediata post-acción
-- Filtro de status en dashboard — `useSearchParams`
-
-**Mutaciones via Server Actions** (no fetch desde el cliente):
-- Permite revalidación automática del cache de Next.js (`revalidatePath`)
-- El formulario funciona sin JS en el cliente (progressive enhancement)
-- No expone endpoints de mutación innecesariamente al browser
-
-**Por qué no un API client en el cliente:** El enunciado pide Server Components por defecto. Hacer fetch desde el cliente requiere manejar loading/error manualmente con `useEffect` o librerías como SWR/React Query. Con Server Components el fetch ocurre en el servidor, el HTML llega listo, y solo se hidrata lo interactivo.
+**Frontend — Server Components por defecto, Client Components solo donde hay estado local o event handlers del browser.** Mutaciones vía Server Actions (`revalidatePath` automático, funciona sin JS, no expone endpoints innecesarios).
 
 ---
 
 ## 2. Máquina de estados
 
-### Implementación
+Tabla de transiciones como constante inmutable + función pura `validate_transition` en `domain/obligation.py`. El frontend recibe `valid_transitions` en cada response y no reimplementa la tabla.
 
-Tabla de transiciones válidas como constante inmutable en `domain/obligation.py`:
-
-```python
-VALID_TRANSITIONS: dict[ObligationStatus, set[ObligationStatus]] = {
-    ObligationStatus.PENDING:      {ObligationStatus.IN_PROGRESS},
-    ObligationStatus.IN_PROGRESS:  {ObligationStatus.SUBMITTED, ObligationStatus.PENDING},
-    ObligationStatus.SUBMITTED:    {ObligationStatus.DONE, ObligationStatus.IN_PROGRESS},
-    ObligationStatus.DONE:         {ObligationStatus.IN_PROGRESS},
-}
-```
-
-Función pura que valida y lanza excepción de dominio si la transición es inválida:
-
-```python
-def validate_transition(current: ObligationStatus, to: ObligationStatus) -> None:
-    if to not in VALID_TRANSITIONS.get(current, set()):
-        raise InvalidTransitionError(current, to)
-```
-
-**Fuente de verdad: el backend.** El frontend recibe `valid_transitions: list[str]` en cada response y solo muestra los botones que corresponden. No reimplementa la tabla de transiciones.
-
-**Por qué función pura y no método en el modelo:** Testeable sin instanciar nada. Sin side effects. La misma función sirve para validar y para derivar `valid_transitions` en el response.
-
-**Alternativa descartada — enum con métodos (`can_transition_to`):** Mezcla dominio con el tipo. Más difícil de testear en aislamiento. Descartado.
-
-**Alternativa descartada — librería de state machine (transitions, pytransitions):** Overhead innecesario para 4 estados y 6 transiciones. La tabla es más legible y explícita. Descartado.
+**Alternativas descartadas:** métodos en el enum (mezcla dominio con tipo), librerías de state machine (overkill para 4 estados).
 
 ---
 
 ## 3. Invariante documento-gated
 
-### Regla
-
-Si `requires_document = True`, la transición a `submitted` falla si no hay `document_url`.
-
-### Dónde vive
-
-En `domain/obligation.py`, función pura `validate_document_gate`, llamada desde el servicio en el mismo paso que `validate_transition`:
-
-```python
-def validate_document_gate(
-    requires_document: bool,
-    document_url: str | None,
-    to: ObligationStatus,
-) -> None:
-    if requires_document and to == ObligationStatus.SUBMITTED and not document_url:
-        raise DocumentRequiredError()
-```
-
-**Esta regla NO está en:**
-- El handler HTTP (solo parsea y delega)
-- El formulario del frontend (el botón puede estar disabled como UX, pero el backend rechaza independientemente)
-- El modelo ORM
-
-**Por qué:** Si la validación solo vive en el form del frontend, un request directo a la API la bypasea. La invariante debe ser inviolable a nivel de backend.
+Si `requires_document = True`, la transición a `submitted` falla sin `document_url`. La validación vive en el dominio (`validate_document_gate`), no en el handler ni en el frontend — un request directo a la API no puede bypassearla.
 
 ---
 
-## 4. `overdue` — campo derivado, no estado
+## 4. `overdue` — campo derivado
 
-### Decisión
+No se persiste. Se calcula en el servicio al construir el DTO: `date.today() > due_date AND status NOT IN (submitted, done)`. El filtro usa `WHERE due_date < NOW() AND status NOT IN (...)` directamente en SQL.
 
-`overdue` **no se persiste**. Se calcula en runtime en la capa de servicio al construir el DTO de respuesta:
-
-```python
-def is_overdue(due_date: date, status: ObligationStatus) -> bool:
-    return (
-        date.today() > due_date
-        and status not in {ObligationStatus.SUBMITTED, ObligationStatus.DONE}
-    )
-```
-
-### Alternativas consideradas
-
-| Alternativa | Pros | Contras | Decisión |
-|---|---|---|---|
-| Campo `overdue` en DB, actualizado por cron job | Filtrable directamente por SQL | Stale data entre ejecuciones; estado derivado convertido en estado persistido; requiere scheduler | Descartada |
-| Computed column en PostgreSQL | Consistente; sin código extra | Acoplamiento al motor de DB; no portable; la lógica de negocio vive en SQL | Descartada |
-| **Calculado en servicio al leer** | Siempre fresco; sin infraestructura extra; fuente de verdad clara | El filtro por `overdue` requiere WHERE sobre `due_date + status` | **Elegida** |
-| Calculado en frontend | Simple | Duplica dominio; violación explícita del enunciado | Rechazada |
-
-**Para filtrar por `overdue` en el dashboard:** la query usa `WHERE due_date < NOW() AND status NOT IN ('submitted', 'done')` directamente, sin necesitar el campo persistido.
+**Alternativas descartadas:** campo en DB con cron job (stale data, requiere scheduler), computed column PostgreSQL (acoplado al motor), calculado en frontend (duplica dominio).
 
 ---
 
 ## 5. Concurrencia — Optimistic Locking
 
-### Escenario
+Campo `version INTEGER` en la tabla. El UPDATE incluye `WHERE version = :expected`; si `rowcount == 0` → HTTP 409. El cliente reintenta con la versión nueva.
 
-Dos requests llegan simultáneamente para cambiar el estado de la misma obligación. Sin control de concurrencia, el segundo sobrescribe al primero silenciosamente (lost update).
-
-### Decisión
-
-Optimistic locking con campo `version INTEGER` en la tabla `obligations`.
-
-**Flujo:**
-1. El cliente lee la obligación y recibe `version: 3`
-2. Al enviar una transición, incluye `version: 3` en el body
-3. El backend ejecuta: `UPDATE obligations SET status=:new, version=4 WHERE id=:id AND version=3`
-4. Si `rowcount == 0` → alguien más actualizó primero → HTTP 409 Conflict
-5. El cliente recarga y reintenta con la versión nueva
-
-### Alternativas consideradas
-
-| Alternativa | Pros | Contras | Decisión |
-|---|---|---|---|
-| Sin control | Implementación mínima | Silent data corruption | Rechazada: dominio de alto cuidado |
-| **Optimistic locking (`version`)** | Sin bloqueos; fácil de implementar; error explícito al cliente | El cliente debe manejar 409 y reintentar | **Elegida** |
-| Pessimistic locking (`SELECT FOR UPDATE`) | Garantía fuerte; sin reintentos | Bloquea filas; peor throughput; riesgo de deadlock | Viable pero overkill |
-| Event sourcing | Trazabilidad máxima; sin lost updates por diseño | Complejidad muy alta | Rechazada |
+**Alternativas descartadas:** sin control (silent data corruption), `SELECT FOR UPDATE` (bloqueos, deadlock risk), event sourcing (complejidad alta).
 
 ---
 
-## 6. `companyTaxId` — dato sensible
+## 6. `companyTaxId` — cifrado en reposo
 
-### Reglas implementadas
+AES-256-GCM con nonce aleatorio de 12 bytes por escritura. Módulo puro `app/crypto.py` (sin dependencias de framework). La clave vive en `ENCRYPTION_KEY` (env var, 32 bytes en base64).
 
-1. **Almacenamiento:** cifrado en reposo con AES-256-GCM en la capa de repositorio
-2. **Lectura:** descifrado en el repositorio → enmascarado en el servicio → `••••6789` en el response
-3. **Logs:** excluido del middleware de logging; nunca aparece en trazas
+El repositorio cifra al escribir y descifra al leer. El servicio solo ve plaintext y aplica la máscara `••••6789`. Las rutas y schemas no saben que el campo está cifrado.
 
-### Arquitectura del cifrado
+**Por qué en el repositorio y no en TypeDecorator:** el TypeDecorator acopla la lógica cripto a SQLAlchemy. Con este enfoque, si se cambia el ORM, `crypto.py` no se toca.
 
-`app/crypto.py` — módulo puro sin dependencias de framework:
-```python
-def encrypt(plaintext: str, key: bytes) -> str  # base64(nonce[12] + ciphertext + tag[16])
-def decrypt(ciphertext: str, key: bytes) -> str  # raises InvalidTag si clave o ciphertext inválidos
-```
-
-La clave (32 bytes, AES-256) vive en `ENCRYPTION_KEY` (env var), decodificada en `settings.encryption_key_bytes`. El repositorio llama a `encrypt`/`decrypt` explícitamente — el servicio, las rutas y los schemas no saben que el campo está cifrado.
-
-**Por qué en el repositorio y no en un SQLAlchemy TypeDecorator:** el TypeDecorator acopla la lógica cripto a SQLAlchemy. Si se cambia el ORM, `crypto.py` no se toca — solo el repo. Ver decisión de arquitectura discutida durante el diseño.
-
-### Implementación de máscara
-
-Función pura en el dominio (sin cambios):
-```python
-def mask_tax_id(tax_id: str) -> str:
-    return "••••" + tax_id[-4:]
-```
-
-Llamada en `ObligationService._to_dto()` sobre el plaintext ya descifrado por el repo.
-
-### Decisión diferida: AAD (Additional Authenticated Data)
-
-La implementación actual no pasa AAD al cifrar. Esto significa que GCM no vincula el ciphertext a la fila específica: alguien con acceso de escritura a la DB podría copiar el valor cifrado de la fila A a la fila B sin que la verificación del tag falle.
-
-**Decisión:** diferido. Requiere acceso de escritura directo a la DB (compromiso ya severo por sí mismo). La solución correcta — pasar `obligation.id.encode()` como AAD — se implementará junto con la migración a KMS (key rotation versionada), donde el rediseño de la firma de `encrypt`/`decrypt` ya es necesario de todas formas.
-
-### Alternativas consideradas para almacenamiento
-
-| Alternativa | Pros | Contras | Decisión |
-|---|---|---|---|
-| Plaintext + máscara | Simple | DB comprometida expone dato | Descartada |
-| **Cifrado en repo + crypto.py puro** | Portabilidad; crypto auditabla en un módulo | Requiere gestión de clave | **Elegida** |
-| SQLAlchemy TypeDecorator | Transparente al código | Acoplado al ORM | Descartada |
-| Cifrado a nivel columna (pgcrypto) | Transparente para la app | Depende del motor DB | Descartada |
+**AAD diferido:** el ciphertext no está vinculado a la fila (sin AAD). Se implementará junto con la migración a KMS. El riesgo (ciphertext swapping) requiere acceso de escritura directo a la DB.
 
 ---
 
-## 7. Audit Trail
+## 7. Audit trail
 
-### Decisión
+Tabla separada `obligation_audit_log`. El INSERT ocurre en la misma transacción que el UPDATE de estado: si el log falla, el cambio no se persiste; si el cambio falla, no queda registro huérfano.
 
-Tabla separada `obligation_audit_log (id, obligation_id, from_status, to_status, changed_at)`. El insert ocurre **en la misma transacción** que el UPDATE de la obligación.
-
-**Por qué misma transacción:** Si el log falla, el cambio de estado no se persiste. Si el cambio de estado falla, no queda registro huérfano. Consistencia garantizada sin lógica de compensación.
-
-**Alternativa descartada — tabla de audit en transacción separada:** Riesgo de inconsistencia. Si la app cae entre el UPDATE y el INSERT del log, el historial queda incompleto. Descartado.
-
-**Alternativa descartada — event bus / message queue:** Correcto para sistemas distribuidos. Overkill para este scope. Descartado.
+**Alternativas descartadas:** transacción separada (riesgo de inconsistencia), event bus (overkill).
 
 ---
 
 ## 8. Contrato de la API
 
-### Endpoints
-
-| Método | Ruta | Descripción | Código éxito |
-|---|---|---|---|
-| GET | `/obligations` | Listar todas (con filtros opcionales: `status`, `overdue`) | 200 |
-| POST | `/obligations` | Crear obligación | 201 |
-| GET | `/obligations/{id}` | Detalle de una obligación | 200 |
-| PATCH | `/obligations/{id}` | Actualizar campos (sin cambiar estado) | 200 |
-| DELETE | `/obligations/{id}` | Eliminar | 204 |
-| POST | `/obligations/{id}/transition` | Cambiar estado | 200 |
-
-### Response schema (todos los endpoints que devuelven una obligación)
-
-```json
-{
-  "id": "uuid",
-  "type": "annual_report",
-  "title": "string",
-  "description": "string | null",
-  "status": "pending",
-  "due_date": "2026-12-31",
-  "owner": "string",
-  "requires_document": true,
-  "document_url": "string | null",
-  "company_tax_id": "••••6789",
-  "overdue": false,
-  "version": 3,
-  "valid_transitions": ["in_progress"],
-  "audit_trail": [
-    { "from_status": "pending", "to_status": "in_progress", "changed_at": "2026-06-26T10:00:00Z" }
-  ],
-  "created_at": "2026-06-26T10:00:00Z",
-  "updated_at": "2026-06-26T10:00:00Z"
-}
-```
-
-### Modelo de errores consistente
-
-```json
-{ "error": "INVALID_TRANSITION",  "detail": "Cannot transition from submitted to pending", "status": 422 }
-{ "error": "DOCUMENT_REQUIRED",   "detail": "Document required before submitting",         "status": 422 }
-{ "error": "CONFLICT",            "detail": "Obligation was modified concurrently",         "status": 409 }
-{ "error": "NOT_FOUND",           "detail": "Obligation not found",                        "status": 404 }
-{ "error": "VALIDATION_ERROR",    "detail": "...",                                         "status": 422 }
-```
-
-**Por qué `valid_transitions` en el response:** El frontend no reimplementa la tabla de transiciones. Recibe qué botones mostrar directamente del backend. Si la máquina de estados cambia, el frontend se actualiza automáticamente.
-
-**Por qué endpoint de transición separado (`/transition`) en lugar de PATCH:** PATCH semántico podría aceptar cualquier valor de `status`, invitando a bypasear la máquina de estados. Un endpoint dedicado deja explícito que cambiar estado es una operación con reglas propias, no una edición de campo.
-
----
-
-## 9. Stack — decisiones y alternativas
-
-### Backend: FastAPI vs Node/TS
-
-**Elegido: FastAPI.** Indicado como primera opción en el enunciado.
-
-| | FastAPI | Node/TS |
+| Método | Ruta | Código |
 |---|---|---|
-| Validación | Pydantic v2 nativo | Zod (equivalente, pero desacoplado del ORM) |
-| ORM | SQLAlchemy async (maduro) | Prisma / Drizzle (más ergonómicos, menos control) |
-| Tipado | Python typing + Pydantic | TypeScript end-to-end (más consistente con frontend) |
-| OpenAPI | Generado automáticamente | Manual o con librerías |
+| GET | `/obligations` | 200 |
+| POST | `/obligations` | 201 |
+| GET | `/obligations/{id}` | 200 |
+| PATCH | `/obligations/{id}` | 200 |
+| DELETE | `/obligations/{id}` | 204 |
+| POST | `/obligations/{id}/transition` | 200 |
+| GET | `/obligations/stats` | 200 |
 
-### Persistencia: PostgreSQL vs SQLite
+Modelo de errores: `{ "error": "ERROR_CODE", "detail": "...", "status": N }`.
 
-**Elegido: PostgreSQL.** Recomendado en el enunciado. El optimistic locking con `rowcount` funciona igual en ambos, pero PostgreSQL es más representativo del entorno de producción real.
+`valid_transitions` en cada response: el frontend no reimplementa la tabla de transiciones. Endpoint `/transition` separado de PATCH para que cambiar estado sea una operación explícita con sus propias reglas.
 
-**SQLite hubiera sido aceptable** para simplificar el setup (sin docker-compose), documentado en README. No se eligió porque el enunciado recomienda PostgreSQL y el overhead de docker-compose es mínimo.
-
-### Deployment: Vercel (frontend) + Render (backend + Postgres)
-
-**Frontend → Vercel:** Zero config para Next.js App Router + Server Actions. Deploy automático desde GitHub.
-
-**Backend → Render:** Soporta FastAPI vía Dockerfile, Postgres gestionado como add-on. Free tier suficiente para una prueba técnica.
-
-**Variables de entorno necesarias:**
-- En Render (backend): `DATABASE_URL` (provista automáticamente por el add-on de Postgres), `ALLOWED_ORIGINS` (URL de Vercel)
-- En Vercel (frontend): `NEXT_PUBLIC_API_URL` (URL del servicio Render), `API_URL` (igual, para Server Components/Actions — sin exponer al browser)
-
-**CORS:** El backend configura `ALLOWED_ORIGINS` desde variable de entorno. En desarrollo local acepta `http://localhost:3000`.
-
-**Desarrollo local:** docker-compose levanta solo PostgreSQL. El backend corre con `uvicorn --reload` y el frontend con `next dev`. Ver sección de desarrollo local más abajo.
-
-### Frontend: next-intl para i18n
-
-**Elegido: next-intl.** Integración nativa con App Router de Next.js. Soporta Server Components (los mensajes se cargan en el servidor). Alternativa `react-i18next` requiere más setup para SSR y no tiene integración oficial con App Router.
+`/stats` separado de la lista paginada: los KPIs son globales e independientes del filtro activo.
 
 ---
 
-## 10. Qué quedó afuera a propósito
+## 9. Stack
 
-| Feature | Razón |
-|---|---|
-| Auth / sesiones | Fuera del scope pedido; mencionado en README |
-| Subida real de documentos (S3) | El enunciado permite mock de URL; la infra real requiere proveedor de storage |
-| Paginación / búsqueda full-text | Stretch goal; la lógica de negocio está completa sin esto |
-| CI (GitHub Actions) | Stretch goal |
-| Logs estructurados (JSON) | La regla de no loguear taxId sí se implementa; el formato estructurado es stretch |
-| Cifrado en reposo del taxId | Documentado como mejora; plaintext + máscara en lectura es suficiente para este scope |
-| Notificaciones / recordatorios | Stretch goal |
+| Decisión | Elegido | Por qué |
+|---|---|---|
+| Backend | FastAPI + Pydantic v2 + SQLAlchemy async | Primera opción del enunciado; OpenAPI automático |
+| Base de datos | PostgreSQL 15 | Recomendado en el enunciado; más representativo que SQLite |
+| Frontend | Next.js 15 App Router | Server Components + Server Actions nativos |
+| i18n | next-intl | Integración nativa con App Router; soporta Server Components |
+| Deploy | Vercel (frontend) + Render (backend) | Zero config para Next.js; Render soporta FastAPI vía Dockerfile |
 
 ---
 
-## 11. Uso de IA
+## 10. Uso de IA
 
-La IA (Claude Sonnet) se usó para generar la estructura inicial de todos los módulos — backend y frontend — y para iterar sobre el código en sesiones de code review. A continuación se detallan los casos donde el código generado fue aceptado sin cambios, y los casos donde fue rechazado o corregido, con la razón concreta.
+La IA generó la estructura inicial y se usó en iteraciones de code review. Las correcciones más relevantes aplicadas sobre el código generado:
 
----
-
-### Lo que funcionó sin corrección
-
-- Estructura de capas del backend (routes / services / repositories / domain) y separación de responsabilidades entre ellas.
-- Implementación de la máquina de estados como tabla de transiciones + función pura `validate_transition`.
-- Función `mask_tax_id` y su ubicación en el dominio.
-- Cálculo de `overdue` como campo derivado en el servicio, sin persistirlo.
-- Optimistic locking con campo `version` y respuesta 409 al detectar conflicto.
-- Audit trail en la misma transacción que el UPDATE de estado.
-- Server Actions para mutaciones (`createObligation`, `transitionObligation`) y revalidación automática de caché con `revalidatePath`.
-- Separación de Client Components al mínimo necesario (`ObligationForm`, `TransitionButtons`, `StatusFilter`).
-
----
-
-### Correcciones aplicadas
-
-#### 1. Navegación por fila de tabla: `<Link>` sobre `<tr>` es HTML inválido
-
-**Código generado:** `<Link>` de Next.js envolviendo un `<tr>` para hacer clickeable cada fila.
-
-**Problema:** `<a>` como hijo de `<tr>` es HTML inválido. React lo detecta y lanza errores de hidratación en consola; algunos browsers lo corrigen silenciosamente, otros rompen el layout.
-
-**Corrección:** se reemplazó por `onClick` + `router.push()` directamente sobre el `<tr>`, con cursor pointer vía Tailwind.
-
-```tsx
-// Antes (inválido)
-<Link href={`/${locale}/obligations/${o.id}`}>
-  <tr>...</tr>
-</Link>
-
-// Después (correcto)
-<tr
-  className="cursor-pointer hover:bg-gray-50"
-  onClick={() => router.push(`/${locale}/obligations/${o.id}`)}
->
-```
+| # | Componente | Problema | Fix |
+|---|---|---|---|
+| 1 | `ObligationsList` | `<Link>` envolviendo `<tr>` es HTML inválido | `onClick` + `router.push()` sobre el `<tr>` |
+| 2 | `LocaleSwitcher` | `usePathname` de `next/navigation` no incluye el prefijo de locale en next-intl v4 | Migrar a `usePathname`/`useRouter` de `@/i18n/navigation` (API oficial de next-intl) |
+| 3 | `TransitionButtons` | `isPending` volvía a `false` con `version` obsoleto antes del re-render del RSC | Agregar `router.refresh()` en el branch de éxito del `startTransition` |
+| 4 | `StatusFilter` | `useSearchParams` sin `<Suspense>` rompe el build SSR de Next.js | Envolver en `<Suspense fallback={null}>` |
+| 5 | `StatusCycleCard` | Stale closure en `setInterval` con `pinned` en React Strict Mode | `useRef` para el timer + `pinnedRef` sincrónico |
+| 6 | `ObligationsFilters` | Debounce reiniciaba al paginar porque `searchParams` era dependencia del efecto | Patrón `searchParamsRef` como proxy sincrónico |
+| 7 | `createObligation` | `data.detail` de FastAPI es array en errores de validación → `[object Object]` | Leer `data.error ?? data.detail ?? fallback` |
+| 8 | `[id]/page.tsx` | 404 y 5xx ambos mostraban `NotFound` | Discriminar: solo 404 → `notFound()`, resto re-lanza al error boundary |
+| 9 | `new/page.tsx` | `useTranslations` (hook cliente) usado en Server Component | Reemplazar por `await getTranslations({ locale })` |
+| 10 | `[id]/page.tsx` | Dos `getTranslations` secuenciales | `Promise.all` para ejecutarlos en paralelo |
 
 ---
 
-#### 2. Filtro de estado: pills de botón reemplazadas por `<select>`
-
-**Código generado:** fila de botones tipo "pill" para filtrar por estado, con lógica de estado activo via className condicional.
-
-**Decisión de diseño:** se reemplazó por un `<select>` nativo. Razones: ocupa menos espacio horizontal en mobile, es accesible por teclado sin CSS adicional, y evita la proliferación de botones cuando los estados crecen.
-
----
-
-#### 3. Manejo de errores en `createObligation`: `data.detail` antes que `data.error`
-
-**Código generado:** al leer el error del backend, se usaba `data.detail` directamente.
-
-**Problema:** el contrato de la API define `{ error: "...", detail: "..." }`. Para errores de validación de FastAPI, `detail` es un array de objetos, lo que produce `[object Object]` en pantalla. El campo semántico correcto es `data.error`.
-
-**Corrección:**
-
-```ts
-// Antes
-return { error: data.detail ?? "Error al crear la obligación." };
-
-// Después
-return { error: data.error ?? data.detail ?? "Error al crear la obligación." };
-```
-
-Se lee `data.error` primero (convención de la API), `data.detail` como fallback para errores de validación de FastAPI, y finalmente un string literal.
-
----
-
-#### 4. `TransitionButtons`: race condition en la versión tras transición exitosa
-
-**Código generado:** al hacer una transición exitosa, el componente no llamaba `router.refresh()`. El Server Component padre se re-renderizaba eventualmente, pero mientras tanto `isPending` volvía a `false` con la versión vieja, lo que permitía disparar una segunda transición con el `version` obsoleto (causando un 409 innecesario).
-
-**Corrección:** se añadió `router.refresh()` dentro del `startTransition` en el branch de éxito, para que `isPending` permanezca `true` hasta que el RSC termine de re-renderizar y entregue la nueva prop `version`.
-
-```tsx
-startTransition(async () => {
-  const result = await transitionObligation(id, toStatus, version, locale);
-  if (result.error) {
-    setError(...);
-  } else {
-    router.refresh(); // ← mantiene isPending=true hasta que RSC re-renderiza
-  }
-});
-```
-
----
-
-#### 5. `StatusFilter` sin `Suspense` en la página de lista
-
-**Código generado:** `StatusFilter` (que usa `useSearchParams`) se montaba directamente en el Server Component de la página.
-
-**Problema:** Next.js App Router requiere que todo componente que llame a `useSearchParams` esté envuelto en `<Suspense>`, o el build falla con un error de SSR.
-
-**Corrección:** se envolvió `<StatusFilter>` en `<Suspense fallback={null}>` en `obligations/page.tsx`.
-
----
-
-#### 6. Labels de `TransitionButtons` hardcodeados en inglés
-
-**Código generado:** los labels de los botones de transición (`"Mark as In Progress"`, `"Submit"`, etc.) estaban hardcodeados en inglés en el componente.
-
-**Corrección:** se movieron al sistema de i18n (`messages/en.json` y `messages/es.json` bajo la clave `detail.transitions`), y el componente los lee con `useTranslations("detail.transitions")`.
-
----
-
-#### 7. `useTranslations` (hook cliente) en un Server Component
-
-**Código generado:** `new/page.tsx` usaba el hook `useTranslations` de next-intl, que es exclusivo de Client Components.
-
-**Corrección:** se reemplazó por `await getTranslations({ locale })`, que es la API correcta para Server Components y consistente con el resto de las páginas.
-
----
-
-#### 8. Discriminación 404 vs 5xx en la página de detalle
-
-**Código generado:** cualquier excepción al cargar una obligación resultaba en renderizar el componente `NotFound`.
-
-**Problema:** un error 500 del servidor no es un "not found" — debe propagarse al error boundary para que el usuario vea un mensaje apropiado, no una pantalla de "obligación no encontrada".
-
-**Corrección:** se discrimina el status HTTP: solo `404` redirige a `notFound()`, cualquier otro error se re-lanza para que lo capture el error boundary.
-
----
-
-#### 9. `getTranslations` secuencial en lugar de paralelo
-
-**Código generado:** en `[id]/page.tsx`, las dos llamadas a `getTranslations` se ejecutaban de forma secuencial (una `await` tras otra).
-
-**Corrección:** se ejecutan en paralelo con `Promise.all`, reduciendo la latencia de renderizado del Server Component.
-
-```ts
-// Antes
-const t = await getTranslations({ locale, namespace: "detail" });
-const tStatus = await getTranslations({ locale, namespace: "obligations" });
-
-// Después
-const [t, tStatus] = await Promise.all([
-  getTranslations({ locale, namespace: "detail" }),
-  getTranslations({ locale, namespace: "obligations" }),
-]);
-```
-
----
-
-#### 10. Ícono de búsqueda: brújula reemplazada por lupa
-
-**Código generado:** ícono SVG de brújula (compass) en el campo de búsqueda.
-
-**Decisión de diseño:** se reemplazó por una lupa (`circle + line` diagonal), que es el ícono universalmente asociado a la acción de buscar. Una brújula no comunica búsqueda.
-
----
-
-#### 11. Color del ícono de búsqueda sincronizado con el borde al hacer focus
-
-**Código generado:** el ícono de búsqueda mantenía `text-gray-400` siempre, sin reaccionar al estado del input.
-
-**Decisión de diseño:** al hacer focus el input muestra un ring violeta (`focus:ring-accent`). El ícono debe acompañar visualmente ese cambio. Se agregó estado `searchFocused` controlado por `onFocus`/`onBlur` del input, y se aplica `text-accent` al SVG cuando está activo.
-
-```tsx
-<svg className={`... transition-colors ${searchFocused ? "text-accent" : "text-gray-400"}`}>
-```
-
----
-
-#### 13. Locale switcher: `usePathname` de `next/navigation` no incluye el prefijo de locale en next-intl v4
-
-**Código generado:** el switcher usaba `usePathname` y `useRouter` de `next/navigation`, y reemplazaba manualmente el segmento de locale en el path:
-
-```ts
-const segments = pathname.split("/");
-segments[1] = next;
-router.push(segments.join("/"));
-```
-
-**Problema:** en Next.js 15 + next-intl v4, el middleware reescribe la URL internamente y `usePathname` de `next/navigation` devuelve el path **sin** el prefijo de locale (e.g., `/obligations` en lugar de `/es/obligations`). La lógica de `segments[1] = next` operaba sobre `["", "obligations"]` y producía `/en` en lugar de `/en/obligations`, perdiendo la página actual al cambiar de idioma.
-
-**Evidencia observada:** los logs del servidor mostraban `GET /en 307` seguido de `GET /en/obligations 200` — un redirect innecesario a través de la root page.
-
-**Corrección:** se creó `i18n/navigation.ts` con `createNavigation(routing)` — la API oficial de next-intl v4 — y el `LocaleSwitcher` usa `usePathname` y `useRouter` de ese módulo. El `usePathname` de next-intl devuelve el path sin locale, y el `useRouter` acepta `{ locale }` como opción de navegación:
-
-```ts
-// Antes
-import { useRouter, usePathname } from "next/navigation";
-const segments = pathname.split("/");
-segments[1] = next;
-router.push(segments.join("/"));
-
-// Después
-import { useRouter, usePathname } from "@/i18n/navigation";
-router.push(pathname, { locale: next });
-```
-
----
-
-#### 12. Filtro de estado: `<select>` nativo reemplazado por dropdown personalizado
-
-**Código generado (iteración previa):** `<select>` nativo. Visualmente inconsistente con el resto de la UI porque el panel desplegable lo renderiza el sistema operativo con su propio estilo, ignorando cualquier CSS de Tailwind sobre los `<option>`.
-
-**Decisión de diseño:** se reemplazó por un dropdown completamente custom: botón trigger con el mismo estilo de los inputs (`rounded-lg border border-gray-200 bg-white`), panel con `rounded-xl border border-gray-100 bg-white shadow-sm`, items con `hover:bg-gray-50`, y el ítem seleccionado con `bg-violet-50 text-accent`. La flecha del trigger rota 180° al abrirse. El cierre al hacer click fuera se maneja con `useEffect` + `mousedown` sobre `document`.
-
----
-
-#### 14. `StatusCycleCard`: desborde de contenido bloqueaba los clicks en los dots de navegación
-
-**Código generado:** el contenedor de cross-fade tenía altura fija `h-9` (36px). El contenido real — número `text-2xl` (~32px) + label `text-xs` (~18px) — ocupa ~50px y desbordaba hacia abajo, cubriendo los dots de navegación y bloqueando sus clicks. La card parecía funcionar (ciclo visual correcto) pero el pinning era imposible.
-
-**Corrección:** altura aumentada a `h-12` (48px) para contener el contenido sin desborde. Se agregó `pointer-events-none` al contenedor para que el overflow no intercepte eventos aunque el contenido lo sobrepase. Ajustes visuales: `mt-0.5` → `mt-1.5`, dot del label `w-1.5` → `w-2`, gaps aumentados.
-
----
-
-#### 15. `StatusCycleCard`: rotación se detenía por stale closure en el callback del intervalo
-
-**Código generado:** el intervalo de rotación se manejaba con `useEffect` + `setInterval`. En React 18/19 Strict Mode, los efectos se invocan dos veces en desarrollo (mount → cleanup → mount), lo que podía dejar el closure del callback con un valor desactualizado de `pinned` o `statuses.length`.
-
-**Corrección:** se reemplazó el enfoque por `useRef` para el timer y un `pinnedRef` sincrónico:
-
-```tsx
-const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-const pinnedRef = useRef(false);
-
-useEffect(() => {
-  pinnedRef.current = pinned;
-  if (timerRef.current) clearInterval(timerRef.current);
-  if (!pinned) {
-    timerRef.current = setInterval(() => {
-      if (pinnedRef.current) return;
-      setIndex((i) => (i + 1) % statuses.length);
-    }, 2500);
-  }
-  return () => { if (timerRef.current) clearInterval(timerRef.current); };
-}, [pinned, statuses.length]);
-```
-
-`pinnedRef.current` se actualiza sincrónicamente en cada render, evitando que el callback del intervalo lea un valor stale de `pinned`.
-
----
-
-#### 16. Lista de obligaciones ordenada por vencimiento ascendente
-
-**Código generado:** la lista mostraba las obligaciones en el orden devuelto por el backend (orden de inserción).
-
-**Decisión de diseño:** el caso de uso principal es detectar qué vence primero. Se ordenó ascendentemente por `due_date` en el cliente, después de aplicar los filtros de búsqueda y estado. La comparación usa `localeCompare` sobre el string ISO (`YYYY-MM-DD`), que es lexicográficamente correcto sin necesidad de parsear fechas.
-
-```ts
-.sort((a, b) => a.due_date.localeCompare(b.due_date))
-```
-
----
-
-#### 17. Filas vencidas resaltadas en rojo en la lista
-
-**Código generado:** todas las filas tenían el mismo estilo neutro (`hover:bg-gray-50`, texto `text-gray-900`/`text-gray-500`).
-
-**Decisión de diseño:** una obligación vencida requiere atención inmediata. Se resalta la fila completa con `bg-red-50 hover:bg-red-100` y el texto cambia a tonos rojos (`text-red-900`, `text-red-700`), incluyendo la fecha de vencimiento en `font-medium` para reforzar la urgencia. El campo `overdue` ya viene calculado por el backend, no se reimplementa la lógica en el frontend.
-
----
-
-#### 18. Formato de fecha adaptado al locale en la lista
-
-**Código generado:** la fecha de vencimiento se mostraba como el string ISO crudo devuelto por el backend (`2026-12-31`), sin adaptación al locale activo.
-
-**Decisión de diseño:** el formato ISO es poco legible para el usuario final y no respeta la convención regional (día/mes en español, mes/día en inglés). Se reemplazó por `toLocaleDateString(locale)`:
-
-```ts
-new Date(`${o.due_date}T00:00:00`).toLocaleDateString(locale)
-```
-
-El sufijo `T00:00:00` (sin zona horaria) es intencional: `new Date("2026-12-31")` se parsea como UTC midnight, lo que en zonas horarias con offset negativo mostraría el día anterior. Con `T00:00:00` se parsea en hora local, evitando el off-by-one. El mismo patrón se usa en `AuditTrail` con `toLocaleString(locale)` para fechas con hora.
-
----
-
-#### 19. Paginación server-side con filtros en la URL
-
-**Contexto:** la lista de obligaciones no tenía paginación ni filtros en el backend; traía todos los registros de una vez.
-
-**Decisión de diseño:** se implementó paginación server-side con LIMIT/OFFSET en el backend y la URL como fuente de verdad para los filtros. La URL contiene `?page=N&status=X&search=Y`. La página Server Component lee `searchParams`, hace dos fetches en paralelo (`/obligations/stats` para los KPIs globales y `/obligations?page&limit&status&search` para la lista paginada), y pasa los datos a componentes Client solo para la interactividad de filtros y navegación de páginas.
-
-**Por qué server-side y no client-side:** cargar todos los registros en el cliente no escala. Con server-side el payload por página es fijo (10 ítems), los filtros y el orden corren en SQL (índices, ILIKE), y los KPIs siempre reflejan el total global independientemente del filtro activo.
-
-**Por qué la URL como fuente de verdad:** permite compartir links filtrados, mantiene el estado al recargar la página, y el botón atrás del browser funciona correctamente. La alternativa (estado en `useState`) no sobrevive la recarga y no es bookmarkable.
-
----
-
-#### 20. Separación de endpoint `/stats` del endpoint de lista paginada
-
-**Contexto:** los KPIs (total global, vencidas, próximas, por estado) son independientes del filtro activo en la lista.
-
-**Decisión de diseño:** se creó `GET /obligations/stats` como endpoint separado que siempre devuelve conteos globales. La lista paginada `GET /obligations` devuelve `total` filtrado (para mostrar "N resultados" en la paginación). Ambos se fetchen en paralelo con `Promise.all` en la página.
-
-**Por qué no incluir stats en la respuesta de la lista:** los KPIs son contexto global que no cambia con el filtro del usuario. Mezclarlos en la lista requeriría dos queries diferentes según si hay filtro o no, complicando el contrato del endpoint.
-
-**Nota de implementación:** `GET /obligations/stats` se define antes de `GET /obligations/{id}` en el router de FastAPI para que el string literal `"stats"` no sea capturado como un ID dinámico.
-
----
-
-#### 21. `searchParamsRef` pattern para debounce con `useSearchParams`
-
-**Problema:** el componente `ObligationsFilters` debouncea el input de búsqueda 300ms antes de escribir en la URL. Para leer los query params actuales dentro del callback del timeout (y no sobreescribir el estado de paginación o filtros activos), se necesita acceso fresco a `searchParams`.
-
-**Primera solución (con bug):** agregar `searchParams` al array de dependencias del `useEffect`. Esto causó un bug: cada click en "página siguiente" actualizaba `searchParams`, reiniciando el timer de debounce. Después de 300ms de inactividad el timer disparaba y navegaba a una URL sin `page`, reseteando la paginación silenciosamente.
-
-**Solución correcta:** usar un ref como proxy sincrónico de `searchParams`:
-
-```tsx
-const searchParamsRef = useRef(searchParams);
-useEffect(() => {
-  searchParamsRef.current = searchParams;
-}, [searchParams]);
-
-useEffect(() => {
-  const timer = setTimeout(() => {
-    const params = new URLSearchParams(searchParamsRef.current.toString());
-    // ... mutar params y hacer router.push
-  }, 300);
-  return () => clearTimeout(timer);
-}, [search, pathname, router]); // sin searchParams como dep
-```
-
-El ref siempre tiene el valor actual porque el efecto de sync se ejecuta sincrónicamente después de cada render. El debounce solo se reinicia cuando el usuario escribe (`search`), no cuando cambia la paginación.
-
----
-
-## 12. Decisiones y cambios solicitados durante el proyecto
-
-Esta sección registra exclusivamente las decisiones que tomé explícitamente eligiendo entre alternativas, y los cambios que solicité a lo largo del desarrollo. Las secciones anteriores documentan el diseño general; esta deja trazabilidad de lo que decidí y pedí.
+## 11. Decisiones y cambios solicitados durante el proyecto
 
 ### Decisiones elegidas entre alternativas
 
-#### Cifrado de `companyTaxId` — clave en variable de entorno
+| Decisión | Alternativa considerada | Elegida | Razón |
+|---|---|---|---|
+| Clave de cifrado | Archivo de secrets, KMS | Variable de entorno | Adecuado para el scope; KMS documentado como mejora productiva |
+| Cifrado en repositorio vs TypeDecorator | TypeDecorator de SQLAlchemy | Módulo puro en repo | Portabilidad: si cambia el ORM, `crypto.py` no se toca |
+| AAD en cifrado | Implementar ahora | Diferir con decisión documentada | Requiere acceso de escritura a DB (compromiso ya severo); se implementa con KMS |
 
-Ante la pregunta de dónde guardar la clave de cifrado, elegí **variable de entorno** por sobre alternativas como un archivo de secrets o un KMS, por ser lo adecuado para el scope de esta prueba. La migración a KMS queda documentada como mejora productiva.
+### Cambios solicitados
 
-#### Cifrado en la capa de repositorio, no en un TypeDecorator de SQLAlchemy
-
-Evalué dos enfoques para cifrar `companyTaxId`:
-
-1. **TypeDecorator de SQLAlchemy** — transparente para el código, pero acopla la lógica cripto al ORM.
-2. **Cifrado explícito en la capa de repositorio** con un módulo puro `app/crypto.py`.
-
-Elegí la **opción 2**. La razón decisiva fue la **portabilidad**: pregunté explícitamente si la solución quedaba acoplada a la base de datos / ORM, y al confirmarse que el TypeDecorator lo estaría, opté por el módulo cripto puro. Si se cambia el ORM o el motor de DB, `crypto.py` no se toca — solo el repositorio.
-
-#### AAD (Additional Authenticated Data) — diferido conscientemente
-
-Durante la code review final se identificó que el cifrado no vincula el ciphertext a la fila (sin AAD). Decidí **aplicar los otros tres fixes (validación de longitud de clave, `populate_existing` en paginación, quitar `--reload` del entrypoint) y diferir el AAD**, documentándolo como mejora a implementar con más tiempo, junto con la migración a KMS. El riesgo (swapping de ciphertext entre filas) requiere acceso de escritura directo a la DB, un compromiso ya severo por sí mismo. Ver §6.
-
-#### Ejecución del plan vía Subagent-Driven Development
-
-Para implementar la feature de cifrado elegí ejecutar el plan con **Subagent-Driven Development** (un subagente implementador + review por tarea + review final de rama) por sobre la ejecución inline.
-
-### Cambios solicitados a lo largo del proyecto
-
-| Cambio | Detalle |
+| Cambio | Descripción |
 |---|---|
-| Cifrado de `companyTaxId` | Cifrado en reposo con AES-256-GCM en la capa de repositorio (ver decisiones arriba y §6) |
-| Docker full-stack | `docker-compose` que levanta PostgreSQL + backend + frontend en un solo comando, con migraciones automáticas al arrancar |
-| Script de datos de prueba | `scripts/populate_db.py` que puebla 100 obligaciones con estados aleatorios e historial de auditoría coherente |
-| README | Instrucciones de Docker, luego reescritura con overview del propósito del proyecto y redacción más clara y consistente en español |
-| `.gitignore` | Ignorar archivos generados por Next.js y pnpm (`next-env.d.ts`, `tsconfig.tsbuildinfo`, etc.) |
-| Manejo de errores | Excepciones de cripto envueltas en `CryptoError`; `IntegrityError` traducido a `PersistenceError` en `create`/`update`; handlers HTTP para ambos siguiendo el contrato `{error, detail, status}` |
+| Cifrado de `companyTaxId` | AES-256-GCM en capa de repositorio, módulo puro `crypto.py` |
+| Docker full-stack | `docker-compose` con PostgreSQL + backend + frontend; migraciones automáticas al arrancar |
+| Script de datos de prueba | `scripts/populate_db.py`: 100 obligaciones con estados aleatorios e historial coherente |
+| README | Overview del proyecto + instrucciones Docker + redacción clara y consistente en español |
+| Manejo de errores granular | `CryptoError`, `PersistenceError`, handlers HTTP para ambos siguiendo contrato `{error, detail, status}` |
