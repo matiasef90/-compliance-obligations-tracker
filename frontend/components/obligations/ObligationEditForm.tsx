@@ -1,11 +1,12 @@
 "use client";
 
-import { useActionState, useMemo } from "react";
+import { useActionState, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { updateObligation } from "@/actions/updateObligation";
 import { Button } from "@/components/ui/Button";
 import { DatePicker } from "@/components/ui/DatePicker";
+import { DocumentUpload } from "@/components/obligations/DocumentUpload";
 import type { Obligation } from "@/lib/types";
 
 interface ObligationEditFormProps {
@@ -23,6 +24,8 @@ export function ObligationEditForm({ obligation, locale }: ObligationEditFormPro
   const tDetail = useTranslations("detail");
   const tObl = useTranslations("obligations");
   const tDp = useTranslations("form.datePicker");
+
+  const [requiresDocument, setRequiresDocument] = useState(obligation.requires_document);
 
   const boundAction = useMemo(
     () => updateObligation.bind(null, locale, obligation.id),
@@ -115,30 +118,29 @@ export function ObligationEditForm({ obligation, locale }: ObligationEditFormPro
         </div>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          {t("documentUrlField")}
-        </label>
-        <input
-          name="document_url"
-          type="url"
-          defaultValue={obligation.document_url ?? ""}
-          className={INPUT_CLASS}
-        />
-      </div>
-
       <div className="flex items-center gap-2">
         <input
           name="requires_document"
           id="requires_document"
           type="checkbox"
-          defaultChecked={obligation.requires_document}
+          checked={requiresDocument}
+          onChange={(e) => setRequiresDocument(e.target.checked)}
           className="h-4 w-4 rounded border-gray-200 accent-[#7c3aed] focus:ring-2 focus:ring-accent focus:ring-offset-0"
         />
         <label htmlFor="requires_document" className="text-sm text-gray-700">
           {t("requiresDocumentField")}
         </label>
       </div>
+
+      {requiresDocument && (
+        <dl>
+          <DocumentUpload
+            id={obligation.id}
+            locale={locale}
+            documentUrl={obligation.document_url}
+          />
+        </dl>
+      )}
 
       <div className="flex items-center gap-3 pt-2">
         <Button type="submit" disabled={isPending}>
