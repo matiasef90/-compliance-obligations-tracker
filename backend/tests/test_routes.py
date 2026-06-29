@@ -190,3 +190,21 @@ async def test_upload_document_on_non_document_obligation_returns_422(client):
 
     assert response.status_code == 422
     assert response.json()["error"] == "DOCUMENT_REQUIRED"
+
+
+async def test_create_stores_ciphertext_in_db(client):
+    response = await client.post("/obligations", json=OBLIGATION_PAYLOAD)
+    assert response.status_code == 201
+    obligation_id = response.json()["id"]
+
+    async with TestSessionLocal() as session:
+        result = await session.execute(
+            text("SELECT company_tax_id FROM obligations WHERE id = :id"),
+            {"id": obligation_id},
+        )
+        raw_value = result.scalar_one()
+
+    assert raw_value != OBLIGATION_PAYLOAD["company_tax_id"], (
+        "company_tax_id debe estar cifrado en la DB, no en plaintext"
+    )
+    assert "30-99999999-9" not in raw_value
