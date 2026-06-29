@@ -9,6 +9,44 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U compliance -d compliance_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    environment:
+      # Override para red Docker (postgres = nombre del servicio, no localhost)
+      DATABASE_URL: postgresql+asyncpg://compliance:compliance@postgres:5432/compliance_db
+      ALLOWED_ORIGINS: http://localhost:3000
+      BASE_URL: http://localhost:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/alembic:/app/alembic
+      - ./backend/static:/app/static
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      # Server actions usan la red Docker interna para llamar al backend
+      API_URL: http://backend:8000
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
 
 volumes:
   postgres_data:
