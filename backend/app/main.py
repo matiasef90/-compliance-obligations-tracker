@@ -5,8 +5,9 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
+from app.crypto import CryptoError
 from app.domain.obligation import DocumentRequiredError, InvalidTransitionError
-from app.repositories.obligation_repo import ConcurrencyError, NotFoundError
+from app.repositories.obligation_repo import ConcurrencyError, NotFoundError, PersistenceError
 from app.routes.obligations import router as obligations_router
 
 app = FastAPI(title="Compliance Obligations Tracker")
@@ -54,6 +55,22 @@ async def not_found_handler(request: Request, exc: NotFoundError) -> JSONRespons
     return JSONResponse(
         status_code=404,
         content={"error": "NOT_FOUND", "detail": str(exc), "status": 404},
+    )
+
+
+@app.exception_handler(PersistenceError)
+async def persistence_handler(request: Request, exc: PersistenceError) -> JSONResponse:
+    return JSONResponse(
+        status_code=500,
+        content={"error": "PERSISTENCE_ERROR", "detail": "Could not persist the change.", "status": 500},
+    )
+
+
+@app.exception_handler(CryptoError)
+async def crypto_handler(request: Request, exc: CryptoError) -> JSONResponse:
+    return JSONResponse(
+        status_code=500,
+        content={"error": "CRYPTO_ERROR", "detail": "Could not process sensitive data.", "status": 500},
     )
 
 

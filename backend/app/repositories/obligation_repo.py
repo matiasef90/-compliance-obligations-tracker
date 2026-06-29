@@ -153,7 +153,10 @@ class ObligationRepo:
         for key, value in data.items():
             setattr(obligation, key, value)
         obligation.version = expected_version + 1
-        await self._session.flush()
+        try:
+            await self._session.flush()
+        except IntegrityError as exc:
+            raise PersistenceError("Failed to persist obligation") from exc
         return await self.get_by_id(id)  # type: ignore[return-value]
 
     async def delete(self, id: str) -> None:
