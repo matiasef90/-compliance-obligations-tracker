@@ -7,6 +7,7 @@ COPY pyproject.toml .
 COPY app/ app/
 COPY alembic/ alembic/
 COPY alembic.ini .
+COPY static/ static/
 RUN pip install --no-cache-dir -e "."
 
 # Entrypoint handles migrations + server start
