@@ -11,6 +11,7 @@
     "empty": "No obligations yet. Create one.",
     "searchPlaceholder": "Search by title, owner or type...",
     "overdue": "Overdue",
+    "overdueTransitionBlocked": "This obligation is overdue. Edit the due date to be able to change its status.",
     "dueDate": "Due",
     "owner": "Owner",
     "type": "Type",

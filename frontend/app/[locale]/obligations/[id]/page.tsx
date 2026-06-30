@@ -36,7 +36,7 @@ export default async function ObligationDetailPage({ params }: PageProps) {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Columna izquierda — datos */}
           <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white rounded-xl border border-gray-100 p-6">
+            <div className={`rounded-xl border p-6 ${obligation.overdue ? "bg-red-50 border-red-200" : "bg-white border-gray-100"}`}>
               <div className="flex items-start justify-between gap-4 mb-6">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">{obligation.title}</h2>
@@ -96,13 +96,14 @@ export default async function ObligationDetailPage({ params }: PageProps) {
 
             {/* Transiciones */}
             {obligation.valid_transitions.length > 0 && (
-              <div className="bg-white rounded-xl border border-gray-100 p-6">
-                <h3 className="text-sm font-semibold text-gray-900 mb-4">{t("transition")}</h3>
+              <div className={`rounded-xl border p-6 ${obligation.overdue ? "bg-red-50 border-red-200" : "bg-white border-gray-100"}`}>
+                <h3 className={`text-sm font-semibold mb-4 ${obligation.overdue ? "text-red-700" : "text-gray-900"}`}>{t("transition")}</h3>
                 <TransitionButtons
                   id={obligation.id}
                   validTransitions={obligation.valid_transitions}
                   version={obligation.version}
                   locale={locale}
+                  overdue={obligation.overdue}
                 />
               </div>
             )}

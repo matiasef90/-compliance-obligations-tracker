@@ -11,6 +11,7 @@
     "empty": "No hay obligaciones. Creá una nueva.",
     "searchPlaceholder": "Buscar por título, responsable o tipo...",
     "overdue": "Vencida",
+    "overdueTransitionBlocked": "Esta obligación está vencida. Editá la fecha de vencimiento para poder cambiar su estado.",
     "dueDate": "Vence",
     "owner": "Responsable",
     "type": "Tipo",

@@ -11,11 +11,13 @@ interface TransitionButtonsProps {
   validTransitions: string[];
   version: number;
   locale: string;
+  overdue: boolean;
 }
 
-export function TransitionButtons({ id, validTransitions, version, locale }: TransitionButtonsProps) {
+export function TransitionButtons({ id, validTransitions, version, locale, overdue }: TransitionButtonsProps) {
   const t = useTranslations("detail.errors");
   const tTransitions = useTranslations("detail.transitions");
+  const tObl = useTranslations("obligations");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
@@ -42,13 +44,16 @@ export function TransitionButtons({ id, validTransitions, version, locale }: Tra
           <Button
             key={status}
             variant="primary"
-            disabled={isPending}
+            disabled={isPending || overdue}
             onClick={() => handleTransition(status)}
           >
             {tTransitions(status as Parameters<typeof tTransitions>[0])}
           </Button>
         ))}
       </div>
+      {overdue && (
+        <p className="text-sm text-red-600">{tObl("overdueTransitionBlocked")}</p>
+      )}
       {error && (
         <p className="text-sm text-red-600">{error}</p>
       )}
