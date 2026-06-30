@@ -1,4 +1,5 @@
 import base64
+import hashlib
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -27,12 +28,7 @@ class Settings(BaseSettings):
 
     @property
     def encryption_key_bytes(self) -> bytes:
-        key = base64.b64decode(self.encryption_key)
-        if len(key) != 32:
-            raise ValueError(
-                f"ENCRYPTION_KEY must decode to exactly 32 bytes (AES-256); got {len(key)}"
-            )
-        return key
+        return hashlib.sha256(self.encryption_key.encode()).digest()
 
 
 settings = Settings()
